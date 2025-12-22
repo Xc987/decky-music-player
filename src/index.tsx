@@ -1,46 +1,43 @@
 import { definePlugin, callable } from "@decky/api";
 import { PanelSection, PanelSectionRow, ButtonItem } from "@decky/ui";
 import { useState, useEffect } from "react";
-import { FaPlay, FaStop } from "react-icons/fa";
+import { FaPlay, FaStop, FaForward, FaBackward } from "react-icons/fa";
+
+type TrackInfo = {
+  index: number;
+  name: string;
+};
 
 type AudioPayload = {
   data: string;
   mime?: string;
+  name?: string;
 };
 
-const loadAudio = callable<[], AudioPayload>("load_audio");
+const getPlaylist = callable<[], TrackInfo[]>("get_playlist");
+const loadTrack = callable<[number], AudioPayload>("load_track");
 
 let audio: HTMLAudioElement | null = null;
 
 function decodeToObjectURL(payload: AudioPayload): string {
-  let base64 = payload.data;
-  let mime = payload.mime ?? "audio/mpeg";
-
-  if (base64.startsWith("data:")) {
-    const match = base64.match(/^data:([^;]+);base64,(.+)$/);
-    if (match) {
-      mime = match[1];
-      base64 = match[2];
-    }
-  }
-
-  const binary = atob(base64);
+  const binary = atob(payload.data);
   const buffer = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     buffer[i] = binary.charCodeAt(i);
   }
 
-  const blob = new Blob([buffer], { type: mime });
+  const blob = new Blob([buffer], {
+    type: payload.mime ?? "audio/mpeg",
+  });
   return URL.createObjectURL(blob);
 }
 
-async function playAudio() {
+async function playIndex(index: number) {
   if (!audio) {
     audio = new Audio();
-    audio.loop = true;
   }
 
-  const payload = await loadAudio();
+  const payload = await loadTrack(index);
   const url = decodeToObjectURL(payload);
 
   audio.src = url;
@@ -56,22 +53,51 @@ function stopAudio() {
 }
 
 function Content() {
+  const [playlist, setPlaylist] = useState<TrackInfo[]>([]);
+  const [current, setCurrent] = useState(0);
   const [playing, setPlaying] = useState(false);
 
   useEffect(() => {
-    if (audio && !audio.paused) {
-      setPlaying(true);
-    }
+    getPlaylist().then(setPlaylist);
   }, []);
+
+  const play = async (index: number = current) => {
+    await playIndex(index);
+    setCurrent(index);
+    setPlaying(true);
+  };
+
+  const next = async () => {
+    if (current + 1 < playlist.length) {
+      await play(current + 1);
+    }
+  };
+
+  const prev = async () => {
+    if (current > 0) {
+      await play(current - 1);
+    }
+  };
 
   return (
     <PanelSection title="Simple Audio Player">
       <PanelSectionRow>
+        <div style={{ fontSize: "12px", opacity: 0.8 }}>
+          {playlist.length > 0
+            ? playlist[current]?.name
+            : "No audio files found in ~/Music"}
+        </div>
+      </PanelSectionRow>
+
+      <PanelSectionRow>
+        <ButtonItem onClick={prev} disabled={current === 0}>
+          <FaBackward /> Previous
+        </ButtonItem>
+
         <ButtonItem
           onClick={async () => {
             if (!playing) {
-              await playAudio();
-              setPlaying(true);
+              await play();
             } else {
               stopAudio();
               setPlaying(false);
@@ -79,7 +105,14 @@ function Content() {
           }}
         >
           {playing ? <FaStop /> : <FaPlay />}{" "}
-          {playing ? "Stop ~/audio.mp3" : "Play ~/audio.mp3"}
+          {playing ? "Stop" : "Play"}
+        </ButtonItem>
+
+        <ButtonItem
+          onClick={next}
+          disabled={current + 1 >= playlist.length}
+        >
+          <FaForward /> Next
         </ButtonItem>
       </PanelSectionRow>
     </PanelSection>
