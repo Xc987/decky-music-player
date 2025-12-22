@@ -5,13 +5,20 @@ import { FaPlay, FaStop, FaForward, FaBackward } from "react-icons/fa";
 
 type TrackInfo = {
   index: number;
-  name: string;
+  title: string;
+  artist?: string;
+  album?: string;
+  cover?: string;
+  cover_mime?: string;
 };
 
 type AudioPayload = {
   data: string;
   mime?: string;
-  name?: string;
+  title?: string;
+  artist?: string;
+  cover?: string;
+  cover_mime?: string;
 };
 
 const getPlaylist = callable<[], TrackInfo[]>("get_playlist");
@@ -29,13 +36,12 @@ function decodeToObjectURL(payload: AudioPayload): string {
   const blob = new Blob([buffer], {
     type: payload.mime ?? "audio/mpeg",
   });
+
   return URL.createObjectURL(blob);
 }
 
 async function playIndex(index: number) {
-  if (!audio) {
-    audio = new Audio();
-  }
+  if (!audio) audio = new Audio();
 
   const payload = await loadTrack(index);
   const url = decodeToObjectURL(payload);
@@ -79,13 +85,32 @@ function Content() {
     }
   };
 
+  const track = playlist[current];
+
   return (
     <PanelSection title="Simple Audio Player">
       <PanelSectionRow>
-        <div style={{ fontSize: "12px", opacity: 0.8 }}>
-          {playlist.length > 0
-            ? playlist[current]?.name
-            : "No audio files found in ~/Music"}
+        {track?.cover && track?.cover_mime && (
+          <img
+            src={`data:${track.cover_mime};base64,${track.cover}`}
+            style={{
+              width: 64,
+              height: 64,
+              objectFit: "cover",
+              borderRadius: 6,
+              marginRight: 12,
+            }}
+          />
+        )}
+
+
+        <div>
+          <div style={{ fontSize: "14px", fontWeight: 600 }}>
+            {track?.title ?? "No track selected"}
+          </div>
+          <div style={{ fontSize: "12px", opacity: 0.7 }}>
+            {track?.artist ?? "Unknown artist"}
+          </div>
         </div>
       </PanelSectionRow>
 
@@ -118,7 +143,6 @@ function Content() {
     </PanelSection>
   );
 }
-
 
 export default definePlugin(() => ({
   name: "SimpleAudio",

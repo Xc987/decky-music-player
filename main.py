@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import os
 import base64
 from pathlib import Path
+from typing import Optional
+
 import decky
+from tinytag import TinyTag, Image
 
 AUDIO_EXTS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".opus"}
+
+# Preload fallback cover image
+FALLBACK_COVER_PATH = Path(os.path.dirname(__file__)) / "assets/cover.png"
+FALLBACK_COVER_B64 = (
+    base64.b64encode(FALLBACK_COVER_PATH.read_bytes()).decode("ascii")
+    if FALLBACK_COVER_PATH.exists()
+    else None
+)
+FALLBACK_COVER_MIME = "image/png"
+
 
 class Plugin:
     def __init__(self):
@@ -23,13 +37,54 @@ class Plugin:
     async def _unload(self):
         decky.logger.info("SimpleAudio backend unloaded")
 
+    def _read_tags(self, path: Path) -> dict:
+        try:
+            tag: TinyTag = TinyTag.get(path, image=True)
+
+            cover_b64: Optional[str] = None
+            cover_mime: Optional[str] = None
+
+            image: Image | None = None
+
+            if tag.images:
+                # Prefer front cover, fallback to any
+                image = tag.images.front_cover or tag.images.any
+
+            if image is not None and image.data:
+                cover_b64 = base64.b64encode(image.data).decode("ascii")
+                cover_mime = image.mime_type
+            else:
+                # Fallback to local cover.png
+                cover_b64 = FALLBACK_COVER_B64
+                cover_mime = FALLBACK_COVER_MIME
+
+            return {
+                "title": tag.title or path.stem,
+                "artist": tag.artist,
+                "additional_artists": tag.other.get("artist"),
+                "album": tag.album,
+                "cover": cover_b64,
+                "cover_mime": cover_mime,
+            }
+
+        except Exception as e:
+            decky.logger.warning(f"Failed to read tags for {path}: {e}")
+            return {
+                "title": path.stem,
+                "artist": None,
+                "additional_artists": None,
+                "album": None,
+                "cover": FALLBACK_COVER_B64,
+                "cover_mime": FALLBACK_COVER_MIME,
+            }
+
     async def get_playlist(self):
         return [
             {
                 "index": i,
-                "name": p.name,
+                **self._read_tags(path),
             }
-            for i, p in enumerate(self.playlist)
+            for i, path in enumerate(self.playlist)
         ]
 
     async def load_track(self, index: int):
@@ -45,5 +100,5 @@ class Plugin:
         return {
             "data": encoded,
             "mime": "audio/mpeg",
-            "name": path.name,
+            **self._read_tags(path),
         }
