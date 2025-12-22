@@ -4,6 +4,10 @@ import os
 import base64
 from pathlib import Path
 from typing import Optional
+import asyncio
+from http.server import SimpleHTTPRequestHandler
+from socketserver import TCPServer
+import threading
 
 import decky
 from tinytag import TinyTag, Image
@@ -23,6 +27,9 @@ FALLBACK_COVER_MIME = "image/png"
 class Plugin:
     def __init__(self):
         self.playlist: list[Path] = []
+        self.playlist_meta: list[dict] = []
+        self.http_port: int = 8000  # temporary HTTP server port
+        self.http_thread: Optional[threading.Thread] = None
 
     async def _main(self):
         music_dir = Path("~/Music").expanduser()
@@ -32,10 +39,20 @@ class Plugin:
                 key=lambda p: p.name.lower(),
             )
 
+            # preload metadata
+            self.playlist_meta = [self._read_tags(p) for p in self.playlist]
+
         decky.logger.info(f"Found {len(self.playlist)} audio files")
+
+        # start HTTP server to serve audio files
+        self._start_http_server()
 
     async def _unload(self):
         decky.logger.info("SimpleAudio backend unloaded")
+        if self.http_thread:
+            # shutdown server by closing the socket
+            # (for simplicity, we rely on daemon thread termination)
+            self.http_thread = None
 
     def _read_tags(self, path: Path) -> dict:
         try:
@@ -43,18 +60,15 @@ class Plugin:
 
             cover_b64: Optional[str] = None
             cover_mime: Optional[str] = None
-
             image: Image | None = None
 
             if tag.images:
-                # Prefer front cover, fallback to any
                 image = tag.images.front_cover or tag.images.any
 
             if image is not None and image.data:
                 cover_b64 = base64.b64encode(image.data).decode("ascii")
                 cover_mime = image.mime_type
             else:
-                # Fallback to local cover.png
                 cover_b64 = FALLBACK_COVER_B64
                 cover_mime = FALLBACK_COVER_MIME
 
@@ -65,6 +79,7 @@ class Plugin:
                 "album": tag.album,
                 "cover": cover_b64,
                 "cover_mime": cover_mime,
+                "filename": path.name,  # will use in HTTP URL
             }
 
         except Exception as e:
@@ -76,29 +91,39 @@ class Plugin:
                 "album": None,
                 "cover": FALLBACK_COVER_B64,
                 "cover_mime": FALLBACK_COVER_MIME,
+                "filename": path.name,
             }
 
     async def get_playlist(self):
         return [
-            {
-                "index": i,
-                **self._read_tags(path),
-            }
-            for i, path in enumerate(self.playlist)
+            {"index": i, **meta}
+            for i, meta in enumerate(self.playlist_meta)
         ]
 
     async def load_track(self, index: int):
         if index < 0 or index >= len(self.playlist):
             raise IndexError("Track index out of range")
 
-        path = self.playlist[index]
-        decky.logger.info(f"Loading track: {path}")
+        meta = self.playlist_meta[index]
+        # return the URL to the local HTTP server
+        url = f"http://127.0.0.1:{self.http_port}/{meta['filename']}"
+        return {**meta, "url": url}
 
-        data = path.read_bytes()
-        encoded = base64.b64encode(data).decode("ascii")
+    def _start_http_server(self):
+        if not self.playlist:
+            return
 
-        return {
-            "data": encoded,
-            "mime": "audio/mpeg",
-            **self._read_tags(path),
-        }
+        # serve the directory containing audio files
+        class CustomHandler(SimpleHTTPRequestHandler):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, directory=str(Path.home() / "Music"), **kwargs)
+
+            def log_message(self, format, *args):
+                return  # silence logging
+
+        def serve():
+            with TCPServer(("127.0.0.1", self.http_port), CustomHandler) as httpd:
+                httpd.serve_forever()
+
+        self.http_thread = threading.Thread(target=serve, daemon=True)
+        self.http_thread.start()
