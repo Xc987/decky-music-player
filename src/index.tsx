@@ -1,6 +1,6 @@
 import { definePlugin, callable } from "@decky/api";
-import { PanelSection, PanelSectionRow, ButtonItem} from "@decky/ui";
-import { useState, useEffect, useRef } from "react";
+import { PanelSection, PanelSectionRow, ButtonItem, SliderField } from "@decky/ui";
+import { useState, useEffect } from "react";
 import { FaPlay, FaStop, FaForward, FaBackward } from "react-icons/fa";
 
 type TrackInfo = {
@@ -18,35 +18,30 @@ const loadTrack = callable<[number], TrackInfo>("load_track");
 
 let audio: HTMLAudioElement | null = null;
 
-export default definePlugin(() => {
-  return {
-    name: "SimpleAudio",
-    icon: <FaPlay />,
-    content: <Content />,
-    onDismount() {
-      if (audio) {
-        audio.pause();
-        audio.currentTime = 0;
-        audio.src = "";
-      }
-    },
-  };
-});
+export default definePlugin(() => ({
+  name: "SimpleAudio",
+  icon: <FaPlay />,
+  content: <Content />,
+  onDismount() {
+    if (audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.src = "";
+    }
+  },
+}));
 
 function Content() {
   const [playlist, setPlaylist] = useState<TrackInfo[]>([]);
   const [current, setCurrent] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0); // in seconds
-  const [duration, setDuration] = useState(0); // in seconds
-
-  const progressRef = useRef<number>(0);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
 
   useEffect(() => {
     getPlaylist().then(setPlaylist);
   }, []);
 
-  // Setup audio element and progress tracking
   useEffect(() => {
     if (!audio) audio = new Audio();
 
@@ -104,12 +99,20 @@ function Content() {
   };
 
   const handleSeek = (value: number) => {
-  if (audio) {
-    audio.currentTime = value;
-    setProgress(value);
-  }
-};
-
+    if (audio) {
+      audio.currentTime = value;
+      setProgress(value);
+    }
+  };
+function formatTime(seconds: number) {
+  const m = Math.floor(seconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const s = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0");
+  return `${m}:${s}`;
+}
 
   const track = playlist[current];
 
@@ -139,25 +142,30 @@ function Content() {
         </div>
       </PanelSectionRow>
 
-      {/* Progress bar */}
+      {/* Progress slider */}
       <PanelSectionRow>
-        <div style={{ display: "flex", alignItems: "center", width: "100%" }}>
-          <input
-            type="range"
-            min={0}
-            max={duration || 1}
-            value={progress}
-            step={0.01}
-            onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-              handleSeek(Number(e.target.value))
-            }
-            style={{ flex: 1 }}
-          />
-          <div style={{ fontSize: "10px", marginLeft: 8 }}>
-            {formatTime(progress)} / {formatTime(duration)}
-          </div>
-        </div>
-      </PanelSectionRow>
+  <div style={{ display: "flex", flexDirection: "column", width: "100%", padding: "0px" }}>
+    {/* Slider */}
+    <SliderField
+      label=""
+      value={progress}
+      min={0}
+      max={duration || 1}
+      step={0.5}
+      showValue={false}
+      onChange={handleSeek}
+    />
+
+    {/* Time labels below, aligned with slider edges */}
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginTop: 2 }}>
+      <span>{formatTime(progress)}</span>
+      <span>{formatTime(duration)}</span>
+    </div>
+  </div>
+</PanelSectionRow>
+
+
+
 
       {/* Playback controls */}
       <PanelSectionRow>
@@ -178,15 +186,4 @@ function Content() {
       </PanelSectionRow>
     </PanelSection>
   );
-}
-
-// Helper to format seconds as mm:ss
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const s = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, "0");
-  return `${m}:${s}`;
 }
