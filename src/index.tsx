@@ -1,5 +1,10 @@
 import { definePlugin, callable } from "@decky/api";
-import { PanelSection, PanelSectionRow, ButtonItem, SliderField } from "@decky/ui";
+import {
+  PanelSection,
+  PanelSectionRow,
+  ButtonItem,
+  SliderField,
+} from "@decky/ui";
 import { useState, useEffect } from "react";
 import { FaPlay, FaStop, FaForward, FaBackward } from "react-icons/fa";
 
@@ -15,6 +20,7 @@ type TrackInfo = {
 
 const getPlaylist = callable<[], TrackInfo[]>("get_playlist");
 const loadTrack = callable<[number], TrackInfo>("load_track");
+const getInitialTrack = callable<[], number>("get_initial_track");
 
 let audio: HTMLAudioElement | null = null;
 
@@ -23,11 +29,7 @@ export default definePlugin(() => ({
   icon: <FaPlay />,
   content: <Content />,
   onDismount() {
-    if (audio) {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.src = "";
-    }
+    // keep audio alive
   },
 }));
 
@@ -37,137 +39,163 @@ function Content() {
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [ready, setReady] = useState(false);
 
+  // ---------- INITIAL LOAD ----------
   useEffect(() => {
-    getPlaylist().then(setPlaylist);
+    (async () => {
+      const list = await getPlaylist();
+      setPlaylist(list);
+
+      const index = await getInitialTrack();
+      setCurrent(index);
+    })();
   }, []);
 
+  // ---------- AUDIO SETUP ----------
   useEffect(() => {
-    if (!audio) audio = new Audio();
+    if (!audio) {
+      audio = new Audio();
+    } else {
+      setPlaying(!audio.paused);
+      setProgress(audio.currentTime || 0);
+      setDuration(audio.duration || 0);
+      setReady(!isNaN(audio.duration) && audio.duration > 0);
+    }
 
-    const updateProgress = () => {
-      if (audio && audio.duration > 0) {
-        setProgress(audio.currentTime);
-        setDuration(audio.duration);
-      }
+    const onTime = () => {
+      if (!audio) return;
+      setProgress(audio.currentTime);
+    };
+
+    const onMeta = () => {
+      if (!audio) return;
+      setDuration(audio.duration);
+      setReady(true);
     };
 
     const onEnded = () => {
       setPlaying(false);
     };
 
-    audio.addEventListener("timeupdate", updateProgress);
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("loadedmetadata", onMeta);
     audio.addEventListener("ended", onEnded);
 
     return () => {
-      audio?.removeEventListener("timeupdate", updateProgress);
+      audio?.removeEventListener("timeupdate", onTime);
+      audio?.removeEventListener("loadedmetadata", onMeta);
       audio?.removeEventListener("ended", onEnded);
     };
   }, []);
 
-  const playTrack = async (index: number = current) => {
-    const payload = await loadTrack(index);
-    if (!payload.url) return;
+  // ---------- LOAD INITIAL TRACK ----------
+  useEffect(() => {
+    if (!audio || audio.src !== "" || playlist.length === 0) return;
 
-    if (!audio) audio = new Audio();
-    audio.src = payload.url;
+    (async () => {
+      const track = await loadTrack(current);
+      if (!track.url) return;
+
+      audio!.src = track.url;
+      audio!.load(); // IMPORTANT
+      setReady(false);
+    })();
+  }, [playlist]);
+
+  // ---------- CONTROLS ----------
+  const playTrack = async (index = current) => {
+    if (!audio) return;
+
+    const track = await loadTrack(index);
+    if (!track.url) return;
+
+    if (audio.src !== track.url) {
+      audio.src = track.url;
+      audio.load(); // REQUIRED
+      setReady(false);
+    }
+
     await audio.play();
     setCurrent(index);
     setPlaying(true);
   };
 
-  const stopTrack = () => {
-    if (!audio) return;
-    audio.pause();
-    setPlaying(false);
-  };
-
   const togglePlay = async () => {
-    if (!playing) {
-      await playTrack();
+    if (!audio) return;
+
+    if (audio.paused) {
+      await audio.play();
+      setPlaying(true);
     } else {
-      stopTrack();
+      audio.pause();
+      setPlaying(false);
     }
   };
 
-  const nextTrack = async () => {
-    if (current + 1 < playlist.length) await playTrack(current + 1);
+  const nextTrack = () => {
+    if (current + 1 < playlist.length) playTrack(current + 1);
   };
 
-  const prevTrack = async () => {
-    if (current > 0) await playTrack(current - 1);
+  const prevTrack = () => {
+    if (current > 0) playTrack(current - 1);
   };
 
   const handleSeek = (value: number) => {
-    if (audio) {
-      audio.currentTime = value;
-      setProgress(value);
-    }
+    if (!audio || !ready) return;
+    audio.currentTime = value;
+    setProgress(value);
   };
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const s = Math.floor(seconds % 60)
-    .toString()
-    .padStart(2, "0");
-  return `${m}:${s}`;
-}
+
+  const formatTime = (s: number) =>
+    `${Math.floor(s / 60)
+      .toString()
+      .padStart(2, "0")}:${Math.floor(s % 60)
+      .toString()
+      .padStart(2, "0")}`;
 
   const track = playlist[current];
 
   return (
     <PanelSection title="Simple Audio Player">
-      {/* Track info with cover */}
+      {/* Track Info */}
       <PanelSectionRow>
         {track?.cover && track?.cover_mime && (
           <img
             src={`data:${track.cover_mime};base64,${track.cover}`}
-            style={{
-              width: 64,
-              height: 64,
-              objectFit: "cover",
-              borderRadius: 6,
-              marginRight: 12,
-            }}
+            style={{ width: 64, height: 64, borderRadius: 6 }}
           />
         )}
         <div>
-          <div style={{ fontSize: "14px", fontWeight: 600 }}>
+          <div style={{ fontWeight: 600 }}>
             {track?.title ?? "No track selected"}
           </div>
-          <div style={{ fontSize: "12px", opacity: 0.7 }}>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>
             {track?.artist ?? "Unknown artist"}
           </div>
         </div>
       </PanelSectionRow>
 
-      {/* Progress slider */}
+      {/* Progress */}
       <PanelSectionRow>
-  <div style={{ display: "flex", flexDirection: "column", width: "100%", padding: "0px" }}>
-    {/* Slider */}
-    <SliderField
-      label=""
-      value={progress}
-      min={0}
-      max={duration || 1}
-      step={0.5}
-      showValue={false}
-      onChange={handleSeek}
-    />
+        <div style={{display: "flex", flexDirection: "column", width: "100%", padding: "0px"}}>
+          <SliderField
+            value={progress}
+            min={0}
+            max={ready ? duration : 1}
+            step={0.5}
+            showValue={false}
+            disabled={!ready}
+            onChange={handleSeek}
+          />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+            <span>{formatTime(progress)}</span>
+            <span>{formatTime(duration)}</span>
+          </div>
+        </div>
+      </PanelSectionRow>
 
-    {/* Time labels below, aligned with slider edges */}
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "10px", marginTop: 2 }}>
-      <span>{formatTime(progress)}</span>
-      <span>{formatTime(duration)}</span>
-    </div>
-  </div>
-</PanelSectionRow>
-
-
-
-
-      {/* Playback controls */}
+      {/* Controls */}
       <PanelSectionRow>
         <ButtonItem onClick={prevTrack} disabled={current === 0}>
           <FaBackward /> Previous
@@ -177,10 +205,7 @@ function formatTime(seconds: number) {
           {playing ? <FaStop /> : <FaPlay />} {playing ? "Stop" : "Play"}
         </ButtonItem>
 
-        <ButtonItem
-          onClick={nextTrack}
-          disabled={current + 1 >= playlist.length}
-        >
+        <ButtonItem onClick={nextTrack} disabled={current + 1 >= playlist.length}>
           <FaForward /> Next
         </ButtonItem>
       </PanelSectionRow>
