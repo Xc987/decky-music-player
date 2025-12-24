@@ -88,6 +88,10 @@ class Plugin:
                 "cover": cover,
                 "cover_mime": mime,
                 "filename": path.name,
+                "bitrate": tag.bitrate,          # kbps
+                "samplerate": tag.samplerate,    # Hz
+                "channels": tag.channels,
+                "bitdepth": getattr(tag, "bitdepth", None),  # may be None
             }
         except Exception as e:
             decky.logger.warning(f"Tag read failed: {e}")
@@ -98,6 +102,10 @@ class Plugin:
                 "cover": FALLBACK_COVER_B64,
                 "cover_mime": FALLBACK_COVER_MIME,
                 "filename": path.name,
+                "bitrate": None,
+                "samplerate": None,
+                "channels": None,
+                "bitdepth": None,
             }
 
     async def get_playlist(self):
@@ -177,4 +185,3 @@ class Plugin:
 
         self.http_thread = threading.Thread(target=serve, daemon=True)
         self.http_thread.start()
-

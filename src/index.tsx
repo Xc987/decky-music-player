@@ -16,6 +16,10 @@ type TrackInfo = {
   cover?: string;
   cover_mime?: string;
   url?: string;
+  bitrate?: number;
+  samplerate?: number;
+  channels?: number;
+  bitdepth?: number;
 };
 
 const getPlaylist = callable<[], TrackInfo[]>("get_playlist");
@@ -58,7 +62,6 @@ function Content() {
       audio.preload = "auto";
     }
 
-    // 🔑 Sync UI from existing audio (reopen safety)
     setPlaying(!audio.paused);
     setProgress(audio.currentTime || 0);
     setDuration(audio.duration || 0);
@@ -100,13 +103,10 @@ function Content() {
   // ---------- LOAD INITIAL TRACK (ONLY ONCE) ----------
   useEffect(() => {
     if (!audio || playlist.length === 0) return;
-    if (audio.src) return; // 🔑 DO NOT reload on reopen
-
+    if (audio.src) return;
     playTrack(current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playlist]);
 
-  // ---------- PLAY TRACK ----------
   const playTrack = async (index: number) => {
     if (!audio) return;
 
@@ -133,7 +133,6 @@ function Content() {
     }
   };
 
-  // ---------- CONTROLS ----------
   const togglePlay = async () => {
     if (!audio) return;
     if (audio.paused) {
@@ -195,6 +194,10 @@ function Content() {
           </div>
           <div style={{ fontSize: 12, opacity: 0.7 }}>
             {track?.artist ?? "Unknown artist"}
+            {track?.bitrate && ` • ${track.bitrate} kbps`}
+            {track?.samplerate && ` • ${track.samplerate} Hz`}
+            {track?.channels && ` • ${track.channels} channel${track.channels > 1 ? "s" : ""}`}
+            {track?.bitdepth && ` • ${track.bitdepth}-bit`}
           </div>
         </div>
       </PanelSectionRow>
