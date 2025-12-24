@@ -2,11 +2,13 @@ import { definePlugin, callable } from "@decky/api";
 import {
   PanelSection,
   PanelSectionRow,
-  ButtonItem,
   SliderField,
+  Focusable,
+  DialogButton
 } from "@decky/ui";
 import { useState, useEffect, useRef } from "react";
-import { FaPlay, FaStop, FaForward, FaBackward } from "react-icons/fa";
+import { FaPlay, FaPause } from "react-icons/fa";
+import { FaBackwardStep, FaForwardStep } from "react-icons/fa6";
 
 type TrackInfo = {
   index: number;
@@ -180,7 +182,7 @@ function Content() {
   const track = playlist[current];
 
   return (
-    <PanelSection title="Simple Audio Player">
+    <PanelSection>
       <PanelSectionRow>
         {track?.cover && track?.cover_mime && (
           <img
@@ -203,7 +205,7 @@ function Content() {
       </PanelSectionRow>
 
       <PanelSectionRow>
-        <div style={{ width: "100%" }}>
+        <div style={{display: "flex", flexDirection: "column", width: "100%", padding: "0px"}}>
           <SliderField
             label=""
             value={progress}
@@ -218,7 +220,7 @@ function Content() {
             style={{
               display: "flex",
               justifyContent: "space-between",
-              fontSize: 10,
+              fontSize: 12,
             }}
           >
             <span>{formatTime(progress)}</span>
@@ -226,24 +228,26 @@ function Content() {
           </div>
         </div>
       </PanelSectionRow>
+      <Focusable style={{marginTop: "10px", marginBottom: "10px", display: "flex", width: "100%",}}
+flow-children="horizontal">
+  <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0,marginRight: "4px"}}
+    onClick={prevTrack}
+  >
+    <FaBackwardStep />
+  </DialogButton>
 
-      <PanelSectionRow>
-        <ButtonItem onClick={prevTrack} disabled={current === 0}>
-          <FaBackward /> Previous
-        </ButtonItem>
+  <DialogButton style={{flex: 1, height: "40px", display: "flex",alignItems: "center",justifyContent: "center", padding: 0,minWidth: 0,marginRight: "4px", marginLeft: "4px", }}
+    onClick={togglePlay}
+  >
+    {playing ? <FaPause /> : <FaPlay />}
+  </DialogButton>
 
-        <ButtonItem onClick={togglePlay}>
-          {playing ? <FaStop /> : <FaPlay />}{" "}
-          {playing ? "Stop" : "Play"}
-        </ButtonItem>
-
-        <ButtonItem
-          onClick={nextTrack}
-          disabled={current + 1 >= playlist.length}
-        >
-          <FaForward /> Next
-        </ButtonItem>
-      </PanelSectionRow>
+  <DialogButton style={{flex: 1,height: "40px",display: "flex",alignItems: "center",justifyContent: "center",padding: 0,minWidth: 0,marginLeft: "4px", }}
+    onClick={nextTrack}
+  >
+    <FaForwardStep />
+  </DialogButton>
+</Focusable>
     </PanelSection>
   );
 }
