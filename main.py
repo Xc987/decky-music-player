@@ -10,7 +10,7 @@ import threading
 import decky
 from tinytag import TinyTag, Image
 from http.server import SimpleHTTPRequestHandler
-from socketserver import TCPServer
+from socketserver import ThreadingTCPServer
 
 AUDIO_EXTS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".opus"}
 
@@ -34,26 +34,6 @@ class Plugin:
         self.http_thread: Optional[threading.Thread] = None
         self.config: dict = {}
 
-    # ---------------- CONFIG ---------------- #
-
-    def _load_or_create_config(self) -> dict:
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
-        if not CONFIG_FILE.exists():
-            config = {
-                "audio_library": str(Path("~/Music").expanduser()),
-                "last_played": None,
-            }
-            CONFIG_FILE.write_text(json.dumps(config, indent=2))
-            return config
-
-        return json.loads(CONFIG_FILE.read_text())
-
-    def _save_config(self):
-        CONFIG_FILE.write_text(json.dumps(self.config, indent=2))
-
-    # ---------------- MAIN ---------------- #
-
     async def _main(self):
         self.config = self._load_or_create_config()
 
@@ -65,7 +45,7 @@ class Plugin:
             )
             self.playlist_meta = [self._read_tags(p) for p in self.playlist]
 
-        if self.playlist and self.config.get("last_played") is None:
+        if self.playlist and not self.config.get("last_played"):
             self.config["last_played"] = self.playlist[0].name
             self._save_config()
 
@@ -74,36 +54,43 @@ class Plugin:
 
     async def _unload(self):
         decky.logger.info("SimpleAudio backend unloaded")
-        self.http_thread = None
 
-    # ---------------- TAGS ---------------- #
+    def _load_or_create_config(self):
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        if not CONFIG_FILE.exists():
+            cfg = {
+                "audio_library": str(Path("~/Music").expanduser()),
+                "last_played": None,
+            }
+            CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+            return cfg
+        return json.loads(CONFIG_FILE.read_text())
 
-    def _read_tags(self, path: Path) -> dict:
+    def _save_config(self):
+        CONFIG_FILE.write_text(json.dumps(self.config, indent=2))
+
+    def _read_tags(self, path: Path):
         try:
-            tag: TinyTag = TinyTag.get(path, image=True)
-
-            image: Image | None = None
-            if tag.images:
-                image = tag.images.front_cover or tag.images.any
+            tag = TinyTag.get(path, image=True)
+            image = tag.images.front_cover or tag.images.any if tag.images else None
 
             if image and image.data:
-                cover_b64 = base64.b64encode(image.data).decode("ascii")
-                cover_mime = image.mime_type
+                cover = base64.b64encode(image.data).decode("ascii")
+                mime = image.mime_type
             else:
-                cover_b64 = FALLBACK_COVER_B64
-                cover_mime = FALLBACK_COVER_MIME
+                cover = FALLBACK_COVER_B64
+                mime = FALLBACK_COVER_MIME
 
             return {
                 "title": tag.title or path.stem,
                 "artist": tag.artist,
                 "album": tag.album,
-                "cover": cover_b64,
-                "cover_mime": cover_mime,
+                "cover": cover,
+                "cover_mime": mime,
                 "filename": path.name,
             }
-
         except Exception as e:
-            decky.logger.warning(f"Tag read failed for {path}: {e}")
+            decky.logger.warning(f"Tag read failed: {e}")
             return {
                 "title": path.stem,
                 "artist": None,
@@ -113,25 +100,19 @@ class Plugin:
                 "filename": path.name,
             }
 
-    # ---------------- RPC ---------------- #
-
     async def get_playlist(self):
         return [{"index": i, **meta} for i, meta in enumerate(self.playlist_meta)]
 
-    async def get_initial_track(self) -> int:
+    async def get_initial_track(self):
         last = self.config.get("last_played")
         if not last:
             return 0
-
-        for i, path in enumerate(self.playlist):
-            if path.name == last:
+        for i, p in enumerate(self.playlist):
+            if p.name == last:
                 return i
         return 0
 
     async def load_track(self, index: int):
-        if index < 0 or index >= len(self.playlist):
-            raise IndexError("Track index out of range")
-
         meta = self.playlist_meta[index]
         self.config["last_played"] = meta["filename"]
         self._save_config()
@@ -140,8 +121,6 @@ class Plugin:
             **meta,
             "url": f"http://127.0.0.1:{self.http_port}/{meta['filename']}",
         }
-
-    # ---------------- HTTP ---------------- #
 
     def _start_http_server(self):
         if not self.playlist:
@@ -153,12 +132,49 @@ class Plugin:
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, directory=str(music_dir), **kwargs)
 
-            def log_message(self, format, *args):
+            def log_message(self, *_):
                 pass
 
+            def send_head(self):
+                path = self.translate_path(self.path)
+                if not os.path.isfile(path):
+                    self.send_error(404, "File not found")
+                    return None
+
+                f = open(path, "rb")
+                fs = os.fstat(f.fileno())
+                size = fs.st_size
+
+                range_header = self.headers.get("Range")
+                if range_header:
+                    start, end = range_header.replace("bytes=", "").split("-")
+                    start = int(start)
+                    end = int(end) if end else size - 1
+
+                    self.send_response(206)
+                    self.send_header("Content-Type", self.guess_type(path))
+                    self.send_header("Accept-Ranges", "bytes")
+                    self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+                    self.send_header("Content-Length", str(end - start + 1))
+                    self.end_headers()
+
+                    f.seek(start)
+                    self.wfile.write(f.read(end - start + 1))
+                    f.close()
+                    return None
+
+                # Normal (non-range) response
+                self.send_response(200)
+                self.send_header("Content-Type", self.guess_type(path))
+                self.send_header("Content-Length", str(size))
+                self.send_header("Accept-Ranges", "bytes")
+                self.end_headers()
+                return f
+
         def serve():
-            with TCPServer(("127.0.0.1", self.http_port), Handler) as httpd:
+            with ThreadingTCPServer(("127.0.0.1", self.http_port), Handler) as httpd:
                 httpd.serve_forever()
 
         self.http_thread = threading.Thread(target=serve, daemon=True)
         self.http_thread.start()
+

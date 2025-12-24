@@ -5,7 +5,7 @@ import {
   ButtonItem,
   SliderField,
 } from "@decky/ui";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FaPlay, FaStop, FaForward, FaBackward } from "react-icons/fa";
 
 type TrackInfo = {
@@ -28,9 +28,6 @@ export default definePlugin(() => ({
   name: "SimpleAudio",
   icon: <FaPlay />,
   content: <Content />,
-  onDismount() {
-    // keep audio alive
-  },
 }));
 
 function Content() {
@@ -40,15 +37,17 @@ function Content() {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState(false);
+
+  const isSeekingRef = useRef(false);
 
   // ---------- INITIAL LOAD ----------
   useEffect(() => {
     (async () => {
       const list = await getPlaylist();
+      const initial = await getInitialTrack();
       setPlaylist(list);
-
-      const index = await getInitialTrack();
-      setCurrent(index);
+      setCurrent(initial);
     })();
   }, []);
 
@@ -56,74 +55,87 @@ function Content() {
   useEffect(() => {
     if (!audio) {
       audio = new Audio();
-    } else {
-      setPlaying(!audio.paused);
-      setProgress(audio.currentTime || 0);
-      setDuration(audio.duration || 0);
-      setReady(!isNaN(audio.duration) && audio.duration > 0);
+      audio.preload = "auto";
     }
 
-    const onTime = () => {
+    // 🔑 Sync UI from existing audio (reopen safety)
+    setPlaying(!audio.paused);
+    setProgress(audio.currentTime || 0);
+    setDuration(audio.duration || 0);
+    setReady(!isNaN(audio.duration) && audio.duration > 0);
+
+    const onLoadedMetadata = () => {
       if (!audio) return;
+      setDuration(audio.duration);
+      setReady(audio.duration > 0);
+      setError(false);
+    };
+
+    const onTimeUpdate = () => {
+      if (!audio || isSeekingRef.current) return;
       setProgress(audio.currentTime);
     };
 
-    const onMeta = () => {
-      if (!audio) return;
-      setDuration(audio.duration);
-      setReady(true);
-    };
+    const onEnded = () => setPlaying(false);
 
-    const onEnded = () => {
+    const onError = () => {
+      setError(true);
+      setReady(false);
       setPlaying(false);
     };
 
-    audio.addEventListener("timeupdate", onTime);
-    audio.addEventListener("loadedmetadata", onMeta);
+    audio.addEventListener("loadedmetadata", onLoadedMetadata);
+    audio.addEventListener("timeupdate", onTimeUpdate);
     audio.addEventListener("ended", onEnded);
+    audio.addEventListener("error", onError);
 
     return () => {
-      audio?.removeEventListener("timeupdate", onTime);
-      audio?.removeEventListener("loadedmetadata", onMeta);
+      audio?.removeEventListener("loadedmetadata", onLoadedMetadata);
+      audio?.removeEventListener("timeupdate", onTimeUpdate);
       audio?.removeEventListener("ended", onEnded);
+      audio?.removeEventListener("error", onError);
     };
   }, []);
 
-  // ---------- LOAD INITIAL TRACK ----------
+  // ---------- LOAD INITIAL TRACK (ONLY ONCE) ----------
   useEffect(() => {
-    if (!audio || audio.src !== "" || playlist.length === 0) return;
+    if (!audio || playlist.length === 0) return;
+    if (audio.src) return; // 🔑 DO NOT reload on reopen
 
-    (async () => {
-      const track = await loadTrack(current);
-      if (!track.url) return;
-
-      audio!.src = track.url;
-      audio!.load(); // IMPORTANT
-      setReady(false);
-    })();
+    playTrack(current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playlist]);
 
-  // ---------- CONTROLS ----------
-  const playTrack = async (index = current) => {
+  // ---------- PLAY TRACK ----------
+  const playTrack = async (index: number) => {
     if (!audio) return;
+
+    setError(false);
+    setReady(false);
+    setProgress(0);
+    setDuration(0);
 
     const track = await loadTrack(index);
-    if (!track.url) return;
-
-    if (audio.src !== track.url) {
-      audio.src = track.url;
-      audio.load(); // REQUIRED
-      setReady(false);
+    if (!track.url) {
+      setError(true);
+      return;
     }
 
-    await audio.play();
-    setCurrent(index);
-    setPlaying(true);
+    audio.src = track.url;
+    audio.load();
+
+    try {
+      await audio.play();
+      setCurrent(index);
+      setPlaying(true);
+    } catch {
+      setError(true);
+    }
   };
 
+  // ---------- CONTROLS ----------
   const togglePlay = async () => {
     if (!audio) return;
-
     if (audio.paused) {
       await audio.play();
       setPlaying(true);
@@ -142,9 +154,21 @@ function Content() {
   };
 
   const handleSeek = (value: number) => {
-    if (!audio || !ready) return;
-    audio.currentTime = value;
-    setProgress(value);
+    if (!audio || !ready || error) return;
+
+    isSeekingRef.current = true;
+
+    const safeValue = Math.min(
+      Math.max(0, value),
+      Math.max(0, audio.duration - 0.25)
+    );
+
+    audio.currentTime = safeValue;
+    setProgress(safeValue);
+
+    setTimeout(() => {
+      isSeekingRef.current = false;
+    }, 150);
   };
 
   const formatTime = (s: number) =>
@@ -158,12 +182,11 @@ function Content() {
 
   return (
     <PanelSection title="Simple Audio Player">
-      {/* Track Info */}
       <PanelSectionRow>
         {track?.cover && track?.cover_mime && (
           <img
             src={`data:${track.cover_mime};base64,${track.cover}`}
-            style={{ width: 64, height: 64, borderRadius: 6 }}
+            style={{ width: 64, height: 64, borderRadius: 6, marginRight: 8 }}
           />
         )}
         <div>
@@ -176,36 +199,45 @@ function Content() {
         </div>
       </PanelSectionRow>
 
-      {/* Progress */}
       <PanelSectionRow>
-        <div style={{display: "flex", flexDirection: "column", width: "100%", padding: "0px"}}>
+        <div style={{ width: "100%" }}>
           <SliderField
+            label=""
             value={progress}
             min={0}
             max={ready ? duration : 1}
             step={0.5}
             showValue={false}
-            disabled={!ready}
+            disabled={!ready || error}
             onChange={handleSeek}
           />
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 10,
+            }}
+          >
             <span>{formatTime(progress)}</span>
             <span>{formatTime(duration)}</span>
           </div>
         </div>
       </PanelSectionRow>
 
-      {/* Controls */}
       <PanelSectionRow>
         <ButtonItem onClick={prevTrack} disabled={current === 0}>
           <FaBackward /> Previous
         </ButtonItem>
 
         <ButtonItem onClick={togglePlay}>
-          {playing ? <FaStop /> : <FaPlay />} {playing ? "Stop" : "Play"}
+          {playing ? <FaStop /> : <FaPlay />}{" "}
+          {playing ? "Stop" : "Play"}
         </ButtonItem>
 
-        <ButtonItem onClick={nextTrack} disabled={current + 1 >= playlist.length}>
+        <ButtonItem
+          onClick={nextTrack}
+          disabled={current + 1 >= playlist.length}
+        >
           <FaForward /> Next
         </ButtonItem>
       </PanelSectionRow>
