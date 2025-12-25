@@ -27,7 +27,6 @@ type TrackInfo = {
 const getPlaylist = callable<[], TrackInfo[]>("get_playlist");
 const loadTrack = callable<[number], TrackInfo>("load_track");
 const getInitialTrack = callable<[], number>("get_initial_track");
-
 let audio: HTMLAudioElement | null = null;
 
 export default definePlugin(() => ({
@@ -35,6 +34,60 @@ export default definePlugin(() => ({
   icon: <FaPlay />,
   content: <Content />,
 }));
+
+function AutoScrollText({ text, style, }: { text: string; style?: React.CSSProperties; }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+  const [shouldScroll, setShouldScroll] = useState(false);
+  const [animationDuration, setAnimationDuration] = useState(0);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    const textEl = textRef.current;
+    if (!container || !textEl) return;
+    const overflowAmount = textEl.scrollWidth - container.clientWidth;
+
+    if (overflowAmount > 0) {
+      setShouldScroll(true);
+      setAnimationDuration(overflowAmount / 25);
+    } else {
+      setShouldScroll(false);
+      setAnimationDuration(0);
+      textEl.style.transform = "translateX(0)";
+    }
+  }, [text]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        overflow: "hidden",
+        whiteSpace: "nowrap",
+        width: "100%",
+      }}>
+      <div
+        ref={textRef}
+        key={text}
+        style={{
+          display: "inline-block",
+          animation: shouldScroll
+            ? `scrollText ${animationDuration}s linear infinite`
+            : "none",
+          ...style,
+        }}>
+        {text}
+      </div>
+      <style>
+        {`
+          @keyframes scrollText {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-100%); }
+          }
+        `}
+      </style>
+    </div>
+  );
+}
 
 function Content() {
   const [playlist, setPlaylist] = useState<TrackInfo[]>([]);
@@ -44,10 +97,8 @@ function Content() {
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
-
   const isSeekingRef = useRef(false);
 
-  // ---------- INITIAL LOAD ----------
   useEffect(() => {
     (async () => {
       const list = await getPlaylist();
@@ -57,7 +108,6 @@ function Content() {
     })();
   }, []);
 
-  // ---------- AUDIO SETUP ----------
   useEffect(() => {
     if (!audio) {
       audio = new Audio();
@@ -102,7 +152,6 @@ function Content() {
     };
   }, []);
 
-  // ---------- LOAD INITIAL TRACK (ONLY ONCE) ----------
   useEffect(() => {
     if (!audio || playlist.length === 0) return;
     if (audio.src) return;
@@ -167,15 +216,11 @@ function Content() {
     audio.currentTime = safeValue;
     setProgress(safeValue);
 
-    setTimeout(() => {
-      isSeekingRef.current = false;
-    }, 150);
+    setTimeout(() => { isSeekingRef.current = false; }, 150);
   };
 
   const formatTime = (s: number) =>
-    `${Math.floor(s / 60)
-      .toString()
-      .padStart(2, "0")}:${Math.floor(s % 60)
+    `${Math.floor(s / 60).toString().padStart(2, "0")}:${Math.floor(s % 60)
       .toString()
       .padStart(2, "0")}`;
 
@@ -183,29 +228,46 @@ function Content() {
 
   return (
     <PanelSection>
+      <style>
+        {`
+          @keyframes scrollText {
+            from { transform: translateX(0%); }
+            to { transform: translateX(-100%); }
+          }
+        `}
+      </style>
       <PanelSectionRow>
-        {track?.cover && track?.cover_mime && (
-          <img
-            src={`data:${track.cover_mime};base64,${track.cover}`}
-            style={{ width: 64, height: 64, borderRadius: 6, marginRight: 8 }}
-          />
-        )}
-        <div>
-          <div style={{ fontWeight: 600 }}>
-            {track?.title ?? "No track selected"}
-          </div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>
-            {track?.artist ?? "Unknown artist"}
-            {track?.bitrate && ` • ${track.bitrate} kbps`}
-            {track?.samplerate && ` • ${track.samplerate} Hz`}
-            {track?.channels && ` • ${track.channels} channel${track.channels > 1 ? "s" : ""}`}
-            {track?.bitdepth && ` • ${track.bitdepth}-bit`}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            marginLeft: -12,
+          }}>
+          {track?.cover && track?.cover_mime && (
+            <img
+              src={`data:${track.cover_mime};base64,${track.cover}`}
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 6,
+                marginRight: 10,
+                objectFit: "cover",
+                flexShrink: 0,
+              }}/>
+          )}
+          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+            <AutoScrollText
+              text={track?.title ?? "No track selected"}
+              style={{ fontWeight: 600 }}/>
+            <AutoScrollText
+              text={track?.artist ?? "Unknown artist"}
+              style={{ fontSize: 12, opacity: 0.75 }}/>
           </div>
         </div>
       </PanelSectionRow>
-
       <PanelSectionRow>
-        <div style={{display: "flex", flexDirection: "column", width: "100%", padding: "0px"}}>
+        <div style={{ display: "flex", flexDirection: "column", width: "100%", padding: "0px" }}>
           <SliderField
             label=""
             value={progress}
@@ -214,40 +276,37 @@ function Content() {
             step={0.5}
             showValue={false}
             disabled={!ready || error}
-            onChange={handleSeek}
-          />
+            onChange={handleSeek}/>
           <div
             style={{
               display: "flex",
               justifyContent: "space-between",
               fontSize: 12,
-            }}
-          >
+            }}>
             <span>{formatTime(progress)}</span>
             <span>{formatTime(duration)}</span>
           </div>
         </div>
       </PanelSectionRow>
-      <Focusable style={{marginTop: "10px", marginBottom: "10px", display: "flex", width: "100%",}}
-flow-children="horizontal">
-  <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0,marginRight: "4px"}}
-    onClick={prevTrack}
-  >
-    <FaBackwardStep />
-  </DialogButton>
-
-  <DialogButton style={{flex: 1, height: "40px", display: "flex",alignItems: "center",justifyContent: "center", padding: 0,minWidth: 0,marginRight: "4px", marginLeft: "4px", }}
-    onClick={togglePlay}
-  >
-    {playing ? <FaPause /> : <FaPlay />}
-  </DialogButton>
-
-  <DialogButton style={{flex: 1,height: "40px",display: "flex",alignItems: "center",justifyContent: "center",padding: 0,minWidth: 0,marginLeft: "4px", }}
-    onClick={nextTrack}
-  >
-    <FaForwardStep />
-  </DialogButton>
-</Focusable>
+      <PanelSectionRow>
+        <div style={{ fontSize: 12, opacity: 0.7, textAlign: "center" }}>
+          {track?.samplerate && `${(track.samplerate / 1000).toFixed(1)} kHz`}
+          {track?.channels && ` / ${track.channels} ch${track.channels > 1 ? "s" : ""}`}
+          {track?.bitrate && ` / ${Math.round(track.bitrate)} kbps`}
+          {track?.bitdepth && ` / ${track.bitdepth}bit`}
+        </div>
+      </PanelSectionRow>
+      <Focusable style={{ marginTop: "10px", marginBottom: "10px", display: "flex", width: "100%", }} flow-children="horizontal">
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px" }} onClick={prevTrack}>
+          <FaBackwardStep/>
+        </DialogButton>
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px", marginLeft: "4px", }} onClick={togglePlay}>
+          {playing ? <FaPause /> : <FaPlay />}
+        </DialogButton>
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginLeft: "4px", }} onClick={nextTrack}>
+          <FaForwardStep/>
+        </DialogButton>
+      </Focusable>
     </PanelSection>
   );
 }

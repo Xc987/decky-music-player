@@ -6,25 +6,19 @@ import base64
 from pathlib import Path
 from typing import Optional
 import threading
-
 import decky
 from tinytag import TinyTag, Image
 from http.server import SimpleHTTPRequestHandler
 from socketserver import ThreadingTCPServer
 
-AUDIO_EXTS = {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".opus"}
+config_file = Path("~/homebrew/settings/Music Player").expanduser() / "config.json"
 
-CONFIG_DIR = Path("~/homebrew/settings/Music Player").expanduser()
-CONFIG_FILE = CONFIG_DIR / "config.json"
-
-FALLBACK_COVER_PATH = Path(os.path.dirname(__file__)) / "assets/cover.png"
-FALLBACK_COVER_B64 = (
-    base64.b64encode(FALLBACK_COVER_PATH.read_bytes()).decode("ascii")
-    if FALLBACK_COVER_PATH.exists()
+cover_art_path = Path(os.path.dirname(__file__)) / "assets/cover.png"
+fallback_cover_b64 = (
+    base64.b64encode(cover_art_path.read_bytes()).decode("ascii")
+    if cover_art_path.exists()
     else None
 )
-FALLBACK_COVER_MIME = "image/png"
-
 
 class Plugin:
     def __init__(self):
@@ -35,52 +29,41 @@ class Plugin:
         self.config: dict = {}
 
     async def _main(self):
-        self.config = self._load_or_create_config()
+        self.config = self._config()
 
         music_dir = Path(self.config["audio_library"]).expanduser()
         if music_dir.exists():
-            self.playlist = sorted(
-                [p for p in music_dir.rglob("*") if p.suffix.lower() in AUDIO_EXTS],
-                key=lambda p: p.name.lower(),
-            )
+            self.playlist = sorted([p for p in music_dir.rglob("*") if p.suffix.lower() in {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".opus"}],key=lambda p: p.name.lower(),)
             self.playlist_meta = [self._read_tags(p) for p in self.playlist]
-
         if self.playlist and not self.config.get("last_played"):
             self.config["last_played"] = self.playlist[0].name
             self._save_config()
-
-        decky.logger.info(f"Found {len(self.playlist)} audio files")
         self._start_http_server()
 
     async def _unload(self):
         decky.logger.info("SimpleAudio backend unloaded")
 
-    def _load_or_create_config(self):
-        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-        if not CONFIG_FILE.exists():
-            cfg = {
-                "audio_library": str(Path("~/Music").expanduser()),
-                "last_played": None,
-            }
-            CONFIG_FILE.write_text(json.dumps(cfg, indent=2))
+    def _config(self):
+        Path("~/homebrew/settings/Music Player").expanduser().mkdir(parents=True, exist_ok=True)
+        if not config_file.exists():
+            cfg = {"audio_library": str(Path("~/Music").expanduser()), "last_played": None}
+            config_file.write_text(json.dumps(cfg, indent=2))
             return cfg
-        return json.loads(CONFIG_FILE.read_text())
+        return json.loads(config_file.read_text())
 
     def _save_config(self):
-        CONFIG_FILE.write_text(json.dumps(self.config, indent=2))
+        config_file.write_text(json.dumps(self.config, indent=2))
 
     def _read_tags(self, path: Path):
         try:
             tag = TinyTag.get(path, image=True)
             image = tag.images.front_cover or tag.images.any if tag.images else None
-
             if image and image.data:
                 cover = base64.b64encode(image.data).decode("ascii")
                 mime = image.mime_type
             else:
-                cover = FALLBACK_COVER_B64
-                mime = FALLBACK_COVER_MIME
-
+                cover = fallback_cover_b64
+                mime = "image/png"
             return {
                 "title": tag.title or path.stem,
                 "artist": tag.artist,
@@ -88,19 +71,18 @@ class Plugin:
                 "cover": cover,
                 "cover_mime": mime,
                 "filename": path.name,
-                "bitrate": tag.bitrate,          # kbps
-                "samplerate": tag.samplerate,    # Hz
+                "bitrate": tag.bitrate,
+                "samplerate": tag.samplerate,
                 "channels": tag.channels,
-                "bitdepth": getattr(tag, "bitdepth", None),  # may be None
+                "bitdepth": getattr(tag, "bitdepth", None)
             }
         except Exception as e:
-            decky.logger.warning(f"Tag read failed: {e}")
             return {
                 "title": path.stem,
                 "artist": None,
                 "album": None,
-                "cover": FALLBACK_COVER_B64,
-                "cover_mime": FALLBACK_COVER_MIME,
+                "cover": fallback_cover_b64,
+                "cover_mime": "image/png",
                 "filename": path.name,
                 "bitrate": None,
                 "samplerate": None,
@@ -124,16 +106,11 @@ class Plugin:
         meta = self.playlist_meta[index]
         self.config["last_played"] = meta["filename"]
         self._save_config()
-
-        return {
-            **meta,
-            "url": f"http://127.0.0.1:{self.http_port}/{meta['filename']}",
-        }
+        return {**meta, "url": f"http://127.0.0.1:{self.http_port}/{meta['filename']}"}
 
     def _start_http_server(self):
         if not self.playlist:
             return
-
         music_dir = Path(self.config["audio_library"]).expanduser()
 
         class Handler(SimpleHTTPRequestHandler):
@@ -148,30 +125,24 @@ class Plugin:
                 if not os.path.isfile(path):
                     self.send_error(404, "File not found")
                     return None
-
                 f = open(path, "rb")
                 fs = os.fstat(f.fileno())
                 size = fs.st_size
-
                 range_header = self.headers.get("Range")
                 if range_header:
                     start, end = range_header.replace("bytes=", "").split("-")
                     start = int(start)
                     end = int(end) if end else size - 1
-
                     self.send_response(206)
                     self.send_header("Content-Type", self.guess_type(path))
                     self.send_header("Accept-Ranges", "bytes")
                     self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
                     self.send_header("Content-Length", str(end - start + 1))
                     self.end_headers()
-
                     f.seek(start)
                     self.wfile.write(f.read(end - start + 1))
                     f.close()
                     return None
-
-                # Normal (non-range) response
                 self.send_response(200)
                 self.send_header("Content-Type", self.guess_type(path))
                 self.send_header("Content-Length", str(size))
