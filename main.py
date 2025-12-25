@@ -67,7 +67,6 @@ class Plugin:
             return {
                 "title": tag.title or path.stem,
                 "artist": tag.artist,
-                "album": tag.album,
                 "cover": cover,
                 "cover_mime": mime,
                 "filename": path.name,
@@ -80,7 +79,6 @@ class Plugin:
             return {
                 "title": path.stem,
                 "artist": None,
-                "album": None,
                 "cover": fallback_cover_b64,
                 "cover_mime": "image/png",
                 "filename": path.name,

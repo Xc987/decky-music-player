@@ -6,6 +6,7 @@ import {
   Focusable,
   DialogButton
 } from "@decky/ui";
+
 import { useState, useEffect, useRef } from "react";
 import { FaPlay, FaPause } from "react-icons/fa";
 import { FaBackwardStep, FaForwardStep } from "react-icons/fa6";
@@ -14,7 +15,6 @@ type TrackInfo = {
   index: number;
   title: string;
   artist?: string;
-  album?: string;
   cover?: string;
   cover_mime?: string;
   url?: string;
@@ -49,7 +49,7 @@ function AutoScrollText({ text, style, }: { text: string; style?: React.CSSPrope
 
     if (overflowAmount > 0) {
       setShouldScroll(true);
-      setAnimationDuration(overflowAmount / 25);
+      setAnimationDuration(15);
     } else {
       setShouldScroll(false);
       setAnimationDuration(0);
@@ -257,13 +257,19 @@ function Content() {
               }}/>
           )}
           <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <AutoScrollText
-              text={track?.title ?? "No track selected"}
-              style={{ fontWeight: 600 }}/>
-            <AutoScrollText
-              text={track?.artist ?? "Unknown artist"}
-              style={{ fontSize: 12, opacity: 0.75 }}/>
+              <AutoScrollText
+                text={track?.title ?? "No track selected"}
+                style={{ fontWeight: 600 }}/>
+              <AutoScrollText
+                text={track?.artist ?? "Unknown artist"}
+                style={{ fontSize: 12, opacity: 0.75 }}/>
+            </div>
           </div>
+          <div style={{ fontSize: 12, opacity: 0.75, textAlign: "center" }}>
+            {track?.samplerate && `${(track.samplerate / 1000).toFixed(1)} kHz`}
+            {track?.channels && ` / ${track.channels} ch${track.channels > 1 ? "s" : ""}`}
+            {track?.bitrate && ` / ${Math.round(track.bitrate)} kbps`}
+            {track?.bitdepth && ` / ${track.bitdepth}bit`}
         </div>
       </PanelSectionRow>
       <PanelSectionRow>
@@ -281,19 +287,12 @@ function Content() {
             style={{
               display: "flex",
               justifyContent: "space-between",
+              marginTop: "4px",
               fontSize: 12,
             }}>
             <span>{formatTime(progress)}</span>
             <span>{formatTime(duration)}</span>
           </div>
-        </div>
-      </PanelSectionRow>
-      <PanelSectionRow>
-        <div style={{ fontSize: 12, opacity: 0.7, textAlign: "center" }}>
-          {track?.samplerate && `${(track.samplerate / 1000).toFixed(1)} kHz`}
-          {track?.channels && ` / ${track.channels} ch${track.channels > 1 ? "s" : ""}`}
-          {track?.bitrate && ` / ${Math.round(track.bitrate)} kbps`}
-          {track?.bitdepth && ` / ${track.bitdepth}bit`}
         </div>
       </PanelSectionRow>
       <Focusable style={{ marginTop: "10px", marginBottom: "10px", display: "flex", width: "100%", }} flow-children="horizontal">
