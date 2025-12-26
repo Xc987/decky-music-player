@@ -1,11 +1,5 @@
 import { definePlugin, callable } from "@decky/api";
-import {
-  PanelSection,
-  PanelSectionRow,
-  SliderField,
-  Focusable,
-  DialogButton
-} from "@decky/ui";
+import {PanelSection, PanelSectionRow, SliderField, Focusable, DialogButton } from "@decky/ui";
 
 import { useState, useEffect, useRef } from "react";
 import { FaPlay, FaPause } from "react-icons/fa";
@@ -27,6 +21,9 @@ type TrackInfo = {
 const getPlaylist = callable<[], TrackInfo[]>("get_playlist");
 const loadTrack = callable<[number], TrackInfo>("load_track");
 const getInitialTrack = callable<[], number>("get_initial_track");
+const getVolume = callable<[], number>("get_volume");
+const setVolume = callable<[number], void>("set_volume");
+
 let audio: HTMLAudioElement | null = null;
 
 export default definePlugin(() => ({
@@ -97,14 +94,22 @@ function Content() {
   const [duration, setDuration] = useState(0);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
+  const [volume, setVolumeState] = useState(1.0);
   const isSeekingRef = useRef(false);
 
   useEffect(() => {
     (async () => {
       const list = await getPlaylist();
       const initial = await getInitialTrack();
+      const vol = await getVolume();
       setPlaylist(list);
       setCurrent(initial);
+      setVolumeState(vol);
+      if (!audio) {
+        audio = new Audio();
+        audio.preload = "auto";
+      }
+      audio.volume = vol;
     })();
   }, []);
 
@@ -173,6 +178,7 @@ function Content() {
     }
 
     audio.src = track.url;
+    audio.volume = volume;
     audio.load();
 
     try {
@@ -219,6 +225,13 @@ function Content() {
     setTimeout(() => { isSeekingRef.current = false; }, 150);
   };
 
+  const handleVolumeChange = async (value: number) => {
+    const v = Math.min(1, Math.max(0, value));
+    setVolumeState(v);
+    if (audio) audio.volume = v;
+    await setVolume(v);
+  };
+
   const formatTime = (s: number) =>
     `${Math.floor(s / 60).toString().padStart(2, "0")}:${Math.floor(s % 60)
       .toString()
@@ -242,7 +255,7 @@ function Content() {
             display: "flex",
             alignItems: "center",
             width: "100%",
-            marginLeft: -12,
+            marginLeft: -14,
           }}>
           {track?.cover && track?.cover_mime && (
             <img
@@ -306,6 +319,17 @@ function Content() {
           <FaForwardStep/>
         </DialogButton>
       </Focusable>
+      <PanelSectionRow>
+        <SliderField
+          label={`Volume (${Math.round(volume * 100)}%)`}
+          value={volume}
+          min={0}
+          max={1}
+          step={0.05}
+          showValue={false}
+          onChange={handleVolumeChange}
+        />
+      </PanelSectionRow>
     </PanelSection>
   );
 }

@@ -40,13 +40,10 @@ class Plugin:
             self._save_config()
         self._start_http_server()
 
-    async def _unload(self):
-        decky.logger.info("SimpleAudio backend unloaded")
-
     def _config(self):
         Path("~/homebrew/settings/Music Player").expanduser().mkdir(parents=True, exist_ok=True)
         if not config_file.exists():
-            cfg = {"audio_library": str(Path("~/Music").expanduser()), "last_played": None}
+            cfg = {"audio_library": str(Path("~/Music").expanduser()), "last_played": None, "volume": 1.0}
             config_file.write_text(json.dumps(cfg, indent=2))
             return cfg
         return json.loads(config_file.read_text())
@@ -105,6 +102,13 @@ class Plugin:
         self.config["last_played"] = meta["filename"]
         self._save_config()
         return {**meta, "url": f"http://127.0.0.1:{self.http_port}/{meta['filename']}"}
+
+    async def get_volume(self):
+        return float(self.config.get("volume", 1.0))
+
+    async def set_volume(self, volume: float):
+        self.config["volume"] = max(0.0, min(1.0, float(volume)))
+        self._save_config()
 
     def _start_http_server(self):
         if not self.playlist:
