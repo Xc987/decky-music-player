@@ -1,5 +1,5 @@
 import { definePlugin, callable } from "@decky/api";
-import {PanelSection, PanelSectionRow, SliderField, Focusable, DialogButton } from "@decky/ui";
+import { PanelSection, PanelSectionRow, SliderField, Focusable, DialogButton } from "@decky/ui";
 
 import { useState, useEffect, useRef } from "react";
 import { FaPlay, FaPause } from "react-icons/fa";
@@ -97,6 +97,16 @@ function Content() {
   const [volume, setVolumeState] = useState(1.0);
   const [initialized, setInitialized] = useState(false);
   const isSeekingRef = useRef(false);
+  const currentRef = useRef(current);
+  const playlistRef = useRef<TrackInfo[]>(playlist);
+  
+  useEffect(() => {
+    currentRef.current = current;
+  }, [current]);
+
+  useEffect(() => {
+    playlistRef.current = playlist;
+  }, [playlist]);
 
   useEffect(() => {
     (async () => {
@@ -138,7 +148,15 @@ function Content() {
       setProgress(audio.currentTime);
     };
 
-    const onEnded = () => setPlaying(false);
+    const onEnded = async () => {
+      if (!audio) return;
+      const nextIndex = currentRef.current + 1;
+      if (nextIndex < playlistRef.current.length) {
+        await playTrack(nextIndex);
+      } else {
+        setPlaying(false);
+      }
+    };
 
     const onError = () => {
       setError(true);
