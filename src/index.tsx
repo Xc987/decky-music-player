@@ -228,12 +228,22 @@ function Content() {
     }
   };
 
-  const nextTrack = () => {
-    if (current + 1 < playlist.length) playTrack(current + 1);
+  const nextTrack = async () => {
+    if (current + 1 >= playlist.length) return;
+    if (playing) {
+      await playTrack(current + 1);
+    } else {
+      await loadTrackSilently(current + 1);
+    }
   };
 
-  const prevTrack = () => {
-    if (current > 0) playTrack(current - 1);
+  const prevTrack = async () => {
+    if (current <= 0) return;
+    if (playing) {
+      await playTrack(current - 1);
+    } else {
+      await loadTrackSilently(current - 1);
+    }
   };
 
   const handleSeek = (value: number) => {
