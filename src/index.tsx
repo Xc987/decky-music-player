@@ -3,6 +3,7 @@ import { PanelSection, PanelSectionRow, SliderField, Focusable, DialogButton, Mo
 import { useState, useEffect, useRef } from "react";
 import { FaPlay, FaPause } from "react-icons/fa";
 import { FaBackwardStep, FaForwardStep } from "react-icons/fa6";
+import { MdInfoOutline, MdOutlineRepeat, MdOutlineRepeatOn, MdShuffle, MdShuffleOn, MdOutlinePlaylistPlay } from "react-icons/md";
 
 type TrackInfo = {
   index: number;
@@ -411,9 +412,20 @@ function Content() {
           <FaForwardStep/>
         </DialogButton>
       </Focusable>
-      <PanelSectionRow>
-        <DialogButton onClick={() => track && showTrackMetadataModal(track)} style={{ width: "100%" }}>Track Details</DialogButton>
-      </PanelSectionRow>
+      <Focusable style={{ marginTop: "10px", marginBottom: "10px", display: "flex", width: "100%", }} flow-children="horizontal">
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px" }} onClick={() => track && showTrackMetadataModal(track)}>
+          <MdInfoOutline/>
+        </DialogButton>
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px", marginLeft: "4px", }} onClick={togglePlay}>
+          <MdOutlineRepeat/>
+        </DialogButton>
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px", marginLeft: "4px", }} onClick={togglePlay}>
+          <MdShuffle/>
+        </DialogButton>
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginLeft: "4px", }} onClick={togglePlay}>
+          <MdOutlinePlaylistPlay/>
+        </DialogButton>
+      </Focusable>
       <PanelSectionRow>
         <SliderField
           label={`Volume (${Math.round(volume * 100)}%)`}
