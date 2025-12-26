@@ -95,6 +95,7 @@ function Content() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [volume, setVolumeState] = useState(1.0);
+  const [initialized, setInitialized] = useState(false);
   const isSeekingRef = useRef(false);
 
   useEffect(() => {
@@ -110,6 +111,7 @@ function Content() {
         audio.preload = "auto";
       }
       audio.volume = vol;
+      setInitialized(true);
     })();
   }, []);
 
@@ -158,10 +160,31 @@ function Content() {
   }, []);
 
   useEffect(() => {
-    if (!audio || playlist.length === 0) return;
+    if (!audio || playlist.length === 0 || !initialized) return;
     if (audio.src) return;
-    playTrack(current);
-  }, [playlist]);
+    loadTrackSilently(current);
+  }, [playlist, initialized]);
+
+  const loadTrackSilently = async (index: number) => {
+    if (!audio) return;
+
+    setError(false);
+    setReady(false);
+    setProgress(0);
+    setDuration(0);
+
+    const track = await loadTrack(index);
+    if (!track.url) {
+      setError(true);
+      return;
+    }
+
+    audio.src = track.url;
+    audio.volume = volume;
+    audio.load();
+    setCurrent(index);
+    setPlaying(false);
+  };
 
   const playTrack = async (index: number) => {
     if (!audio) return;
@@ -192,6 +215,10 @@ function Content() {
 
   const togglePlay = async () => {
     if (!audio) return;
+    if (!audio.src && playlist.length > 0) {
+      await playTrack(current);
+      return;
+    }
     if (audio.paused) {
       await audio.play();
       setPlaying(true);
