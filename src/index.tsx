@@ -1,6 +1,5 @@
 import { definePlugin, callable } from "@decky/api";
-import { PanelSection, PanelSectionRow, SliderField, Focusable, DialogButton } from "@decky/ui";
-
+import { PanelSection, PanelSectionRow, SliderField, Focusable, DialogButton, ModalRoot, showModal } from "@decky/ui";
 import { useState, useEffect, useRef } from "react";
 import { FaPlay, FaPause } from "react-icons/fa";
 import { FaBackwardStep, FaForwardStep } from "react-icons/fa6";
@@ -32,7 +31,7 @@ export default definePlugin(() => ({
   content: <Content />,
 }));
 
-function AutoScrollText({ text, style, }: { text: string; style?: React.CSSProperties; }) {
+function AutoScrollText({ text, style }: { text: string; style?: React.CSSProperties; }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const [shouldScroll, setShouldScroll] = useState(false);
@@ -292,18 +291,56 @@ function Content() {
       .toString()
       .padStart(2, "0")}`;
 
+  const showTrackMetadataModal = (track: TrackInfo) => { showModal(<TrackMetadataModal track={track} />,undefined); };
+
+
+  function TrackMetadataModal({ track, closeModal }: { track: TrackInfo; closeModal?: () => void }) {
+    return (
+      <ModalRoot onCancel={closeModal} onOK={closeModal}>
+        <div style={{ 
+          display: "flex", 
+          flexDirection: "column", 
+          alignItems: "flex-start",
+          width: "80vw", 
+          maxHeight: "80vh", 
+          overflowY: "auto",
+          padding: 24,
+          gap: 16,
+          borderRadius: 12
+        }}>
+          <div style={{ fontSize: 22, fontWeight: 600, textAlign: "center" }}>Details</div>
+          {track.cover && track.cover_mime && (
+            <img 
+              src={`data:${track.cover_mime};base64,${track.cover}`} 
+              style={{ 
+                maxHeight: 200, 
+                width: "auto", 
+                maxWidth: "100%", 
+                borderRadius: 12, 
+                objectFit: "contain" 
+              }}
+            />
+          )}
+          <div style={{ fontSize: 16, lineHeight: 1.6, width: "100%", maxWidth: 500, textAlign: "left" }}>
+            {track.title && <div><b>Title:</b> {track.title}</div>}
+            {track.artist && <div><b>Title:</b> {track.artist || "Unknown"}</div>}
+            {track.samplerate && <div><b>Sample Rate:</b> {(track.samplerate / 1000).toFixed(1)} kHz</div>}
+            {track.bitdepth && <div><b>Bit Depth:</b> {track.bitdepth} bit</div>}
+            {track.channels && <div><b>Channels:</b> {track.channels}</div>}
+            {track.bitrate && <div><b>Bitrate:</b> {Math.round(track.bitrate)} kbps</div>}
+          </div>
+        </div>
+        <div style={{ marginTop: 16 }}>
+            <DialogButton onClick={closeModal}>Close</DialogButton>
+          </div>
+      </ModalRoot>
+    );
+  }
+
   const track = playlist[current];
 
   return (
     <PanelSection>
-      <style>
-        {`
-          @keyframes scrollText {
-            from { transform: translateX(0%); }
-            to { transform: translateX(-100%); }
-          }
-        `}
-      </style>
       <PanelSectionRow>
         <div
           style={{
@@ -374,6 +411,9 @@ function Content() {
           <FaForwardStep/>
         </DialogButton>
       </Focusable>
+      <PanelSectionRow>
+        <DialogButton onClick={() => track && showTrackMetadataModal(track)} style={{ width: "100%" }}>Track Details</DialogButton>
+      </PanelSectionRow>
       <PanelSectionRow>
         <SliderField
           label={`Volume (${Math.round(volume * 100)}%)`}
