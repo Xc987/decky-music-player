@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 import threading
 import decky
+import mimetypes
 from tinytag import TinyTag, Image
 from http.server import SimpleHTTPRequestHandler
 from socketserver import ThreadingTCPServer
@@ -64,6 +65,17 @@ class Plugin:
             return {
                 "title": tag.title or path.stem,
                 "artist": tag.artist,
+                "album": tag.album,
+                "albumartist": tag.albumartist,
+                "disc": tag.disc,
+                "disc_total": tag.disc_total,
+                "track": tag.track,
+                "track_total": tag.track_total,
+                "genre": tag.genre,
+                "year": tag.year,
+                "duration": tag.duration,
+                "mime_type": mimetypes.guess_type(str(path))[0],
+                "full_path": str(path),
                 "cover": cover,
                 "cover_mime": mime,
                 "filename": path.name,
@@ -76,6 +88,17 @@ class Plugin:
             return {
                 "title": path.stem,
                 "artist": None,
+                "album": None,
+                "albumartist": None,
+                "disc": None,
+                "disc_total": None,
+                "track": None,
+                "track_total": None,
+                "genre": None,
+                "year": None,
+                "duration": None,
+                "mime_type": mimetypes.guess_type(str(path))[0],
+                "full_path": str(path),
                 "cover": fallback_cover_b64,
                 "cover_mime": "image/png",
                 "filename": path.name,

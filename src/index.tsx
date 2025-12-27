@@ -9,6 +9,17 @@ type TrackInfo = {
   index: number;
   title: string;
   artist?: string;
+  album?: string;
+  albumartist?: string;
+  disc?: number;
+  disc_total?: number;
+  track?: number;
+  track_total?: number;
+  genre?: string;
+  year?: number;
+  duration?: number;
+  mime_type?: string;
+  full_path?: string;
   cover?: string;
   cover_mime?: string;
   url?: string;
@@ -296,47 +307,88 @@ function Content() {
 
 
   function TrackMetadataModal({ track, closeModal }: { track: TrackInfo; closeModal?: () => void }) {
-    return (
-      <ModalRoot onCancel={closeModal} onOK={closeModal}>
-        <div style={{ 
-          display: "flex", 
-          flexDirection: "column", 
-          alignItems: "flex-start",
-          width: "80vw", 
-          maxHeight: "80vh", 
-          overflowY: "auto",
-          padding: 24,
-          gap: 16,
-          borderRadius: 12
-        }}>
-          <div style={{ fontSize: 22, fontWeight: 600, textAlign: "center" }}>Details</div>
-          {track.cover && track.cover_mime && (
-            <img 
-              src={`data:${track.cover_mime};base64,${track.cover}`} 
-              style={{ 
-                maxHeight: 200, 
-                width: "auto", 
-                maxWidth: "100%", 
-                borderRadius: 12, 
-                objectFit: "contain" 
-              }}
-            />
-          )}
-          <div style={{ fontSize: 16, lineHeight: 1.6, width: "100%", maxWidth: 500, textAlign: "left" }}>
-            {track.title && <div><b>Title:</b> {track.title}</div>}
-            {track.artist && <div><b>Title:</b> {track.artist || "Unknown"}</div>}
-            {track.samplerate && <div><b>Sample Rate:</b> {(track.samplerate / 1000).toFixed(1)} kHz</div>}
-            {track.bitdepth && <div><b>Bit Depth:</b> {track.bitdepth} bit</div>}
-            {track.channels && <div><b>Channels:</b> {track.channels}</div>}
-            {track.bitrate && <div><b>Bitrate:</b> {Math.round(track.bitrate)} kbps</div>}
-          </div>
+
+  return (
+    <ModalRoot onCancel={closeModal} onOK={closeModal}>
+      <div style={{ 
+        display: "flex", 
+        flexDirection: "column", 
+        alignItems: "flex-start",
+        width: "80vw", 
+        maxHeight: "80vh", 
+        overflowY: "auto",
+        padding: 24,
+        gap: 16,
+        borderRadius: 12
+      }}>
+        <Focusable onClick={() => {}} onActivate={() => {}}>
+          <div
+            tabIndex={0}
+            style={{
+              fontSize: 22,
+              fontWeight: 600,
+              textAlign: "center",
+              width: "100%",
+              cursor: "pointer",
+              borderRadius: 4,
+              padding: "2px 0",
+              transition: "background 0.2s",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >Cover art</div>
+        </Focusable>
+
+        {track.cover && track.cover_mime && (
+          <img 
+            src={`data:${track.cover_mime};base64,${track.cover}`} 
+            style={{ 
+              maxHeight: 200, 
+              width: "auto", 
+              maxWidth: "100%", 
+              borderRadius: 12, 
+              objectFit: "contain" 
+            }}
+          />
+        )}
+        <Focusable onClick={() => {}} onActivate={() => {}}>
+          <div
+            tabIndex={0}
+            style={{
+              fontSize: 22,
+              fontWeight: 600,
+              textAlign: "center",
+              width: "100%",
+              cursor: "pointer",
+              borderRadius: 4,
+              padding: "2px 0",
+              transition: "background 0.2s",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
+            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+          >Details</div>
+        </Focusable>
+
+        <div style={{ fontSize: 16, lineHeight: 1.6, width: "100%", maxWidth: 500, textAlign: "left" }}> 
+          {<div><b>Title:</b> {track.title || "Unknown title"}</div>} 
+          {<div><b>Title:</b> {track.artist || "Unknown artist"}</div>} 
+          {<div><b>Album:</b> {track.album || "None"}</div>} 
+          {<div><b>Album Artist:</b> {track.albumartist || "Unknown artist"}</div>} 
+          {(<div><b>Track:</b> {track.track || "0"} / {track.track_total || "0"}</div>)} 
+          {(<div><b>Disc:</b> {track.disc || "0"} / {track.disc_total || "0"}</div>)} 
+          {<div><b>Genre:</b> {track.genre || "Unknown genre"}</div>} 
+          {<div><b>Year:</b> {track.year || "Unknown year"}</div>} 
+          {track.duration && (<div><b>Duration:</b> {Math.floor(track.duration / 60)}:{Math.floor(track.duration % 60).toString().padStart(2, "0")}</div> )} 
+          {track.mime_type && <div><b>MIME Type:</b> {track.mime_type}</div>} 
+          {track.full_path && (<div><b>Path:</b> {track.full_path}</div>)}
         </div>
-        <div style={{ marginTop: 16 }}>
-            <DialogButton onClick={closeModal}>Close</DialogButton>
-          </div>
-      </ModalRoot>
-    );
-  }
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <DialogButton onClick={closeModal}>Close</DialogButton>
+      </div>
+    </ModalRoot>
+  );
+}
 
   const track = playlist[current];
 
