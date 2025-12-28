@@ -34,7 +34,8 @@ class Plugin:
 
         music_dir = Path(self.config["audio_library"]).expanduser()
         if music_dir.exists():
-            self.playlist = sorted([p for p in music_dir.rglob("*") if p.suffix.lower() in {".mp3", ".wav", ".ogg", ".flac", ".m4a", ".opus"}],key=lambda p: p.name.lower(),)
+            supported_exts = {ext.lower() for ext in TinyTag.SUPPORTED_FILE_EXTENSIONS}
+            self.playlist = sorted([p for p in music_dir.rglob("*") if p.is_file() and p.suffix.lower() in supported_exts],key=lambda p: p.name.lower())
             self.playlist_meta = [self._read_tags(p) for p in self.playlist]
         if self.playlist and not self.config.get("last_played"):
             self.config["last_played"] = self.playlist[0].name
