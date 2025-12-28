@@ -40,11 +40,7 @@ const setRepeat = callable<[boolean], void>("set_repeat");
 
 let audio: HTMLAudioElement | null = null;
 
-export default definePlugin(() => ({
-  name: "SimpleAudio",
-  icon: <FaPlay />,
-  content: <Content />,
-}));
+export default definePlugin(() => ({name: "SimpleAudio", icon: <FaPlay/>,content: <Content/>}));
 
 function AutoScrollText({ text, style }: { text: string; style?: React.CSSProperties; }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -69,32 +65,12 @@ function AutoScrollText({ text, style }: { text: string; style?: React.CSSProper
   }, [text]);
 
   return (
-    <div
-      ref={containerRef}
-      style={{
-        overflow: "hidden",
-        whiteSpace: "nowrap",
-        width: "100%",
-      }}>
-      <div
-        ref={textRef}
-        key={text}
-        style={{
-          display: "inline-block",
-          animation: shouldScroll
-            ? `scrollText ${animationDuration}s linear infinite`
-            : "none",
-          ...style,
-        }}>
+    <div ref={containerRef} style={{overflow: "hidden", whiteSpace: "nowrap", width: "100%"}}>
+      <div ref={textRef} key={text} style={{ display: "inline-block", animation: shouldScroll  ? `scrollText ${animationDuration}s linear infinite`: "none", ...style,}}>
         {text}
       </div>
       <style>
-        {`
-          @keyframes scrollText {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-100%); }
-          }
-        `}
+        {` @keyframes scrollText {0% { transform: translateX(0); } 100% { transform: translateX(-100%); }} `}
       </style>
     </div>
   );
@@ -328,123 +304,104 @@ function Content() {
     await setRepeat(next);
   };
 
+  const showPlaylistModal = () => {
+    showModal(
+      <PlaylistModal playlist={playlist} current={current} playing={playing} onSelect={async (index) => {
+          if (playing) {
+            await playTrack(index);
+          } else {
+            await loadTrackSilently(index);
+          }
+        }}
+      />,undefined
+    );
+  };
+
+  function PlaylistModal({playlist, current, playing, onSelect, closeModal}: {playlist: TrackInfo[]; current: number; playing: boolean; onSelect: (index: number) => void; closeModal?: () => void}) {
+    return (
+      <ModalRoot onCancel={closeModal} onOK={closeModal}>
+        <div style={{maxHeight: "65vh", overflowY: "auto", display: "flex", flexDirection: "column", gap: 6,}}>
+          {playlist.map((track, index) => {
+            const isCurrent = index === current;
+            return (
+              <Focusable key={index} onActivate={() => { onSelect(index); closeModal?.();}}>
+                <div style={{display: "flex", alignItems: "center", padding: "8px 10px", borderRadius: 8, cursor: "pointer", background: isCurrent? "rgba(0, 200, 255, 0.2)": "transparent",transition: "background 0.15s"}}>
+                  <div style={{ width: 40, height: 40, marginRight: 10, flexShrink: 0 }}>
+                    {track.cover && track.cover_mime ? (<img src={`data:${track.cover_mime};base64,${track.cover}`} style={{width: "100%",height: "100%",objectFit: "cover",borderRadius: 4,}}/>
+                    ) : (
+                      <div style={{width: "100%", height: "100%", background: "#444", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", color: "#aaa", fontSize: 12}}>
+                        ?
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: isCurrent ? 600 : 400 }}>
+                      {track.title}
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {track.artist ?? "Unknown artist"}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, opacity: 0.7 }}>
+                    {track.duration ? `${Math.floor(track.duration / 60)}:${Math.floor(track.duration % 60).toString().padStart(2, "0")}`: "--:--"}
+                  </div>
+                </div>
+              </Focusable>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <DialogButton onClick={closeModal}>Close</DialogButton>
+        </div>
+      </ModalRoot>
+    );
+  }
+
   const showTrackMetadataModal = (track: TrackInfo) => { showModal(<TrackMetadataModal track={track} />,undefined); };
 
   function TrackMetadataModal({ track, closeModal }: { track: TrackInfo; closeModal?: () => void }) {
-
-  return (
-    <ModalRoot onCancel={closeModal} onOK={closeModal}>
-      <div style={{ 
-        display: "flex", 
-        flexDirection: "column", 
-        alignItems: "flex-start",
-        width: "45vw", 
-        maxHeight: "80vh", 
-        overflowY: "auto",
-        marginBottom: "8px",
-        gap: 16,
-        borderRadius: 12
-      }}>
-        <Focusable onClick={() => {}} onActivate={() => {}}>
-          <div
-            tabIndex={0}
-            style={{
-              fontSize: 22,
-              fontWeight: 600,
-              textAlign: "center",
-              width: "100%",
-              cursor: "pointer",
-              borderRadius: 4,
-              padding: "2px 0",
-              transition: "background 0.2s",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >Cover art</div>
-        </Focusable>
-
-        {track.cover && track.cover_mime && (
-          <img 
-            src={`data:${track.cover_mime};base64,${track.cover}`} 
-            style={{ 
-              maxHeight: 200, 
-              width: "auto", 
-              maxWidth: "100%", 
-              borderRadius: 12, 
-              objectFit: "contain" 
-            }}
-          />
-        )}
-        <Focusable onClick={() => {}} onActivate={() => {}}>
-          <div
-            tabIndex={0}
-            style={{
-              fontSize: 22,
-              fontWeight: 600,
-              textAlign: "center",
-              width: "100%",
-              cursor: "pointer",
-              borderRadius: 4,
-              padding: "2px 0",
-              transition: "background 0.2s",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.1)")}
-            onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-          >Details</div>
-        </Focusable>
-      </div>
-        <div style={{ fontSize: 16, lineHeight: 1.6, width: "100%", maxWidth: "45vw", textAlign: "left" }}> 
-          {<div><b>Title:</b> {track.title || "Unknown title"}</div>} 
-          {<div><b>Artist:</b> {track.artist || "Unknown artist"}</div>} 
-          {<div><b>Album:</b> {track.album || "None"}</div>} 
-          {<div><b>Album Artist:</b> {track.albumartist || "Unknown artist"}</div>} 
-          {(<div><b>Track:</b> {track.track || "0"} / {track.track_total || "0"}</div>)} 
-          {(<div><b>Disc:</b> {track.disc || "0"} / {track.disc_total || "0"}</div>)} 
-          {<div><b>Genre:</b> {track.genre || "Unknown genre"}</div>} 
-          {<div><b>Year:</b> {track.year || "Unknown year"}</div>} 
-          {track.duration && (<div><b>Duration:</b> {Math.floor(track.duration / 60)}:{Math.floor(track.duration % 60).toString().padStart(2, "0")}</div> )} 
-          {track.mime_type && <div><b>MIME Type:</b> {track.mime_type}</div>} 
-          {track.full_path && (<div><b>Path:</b> {track.full_path}</div>)}
-          {track.filesize && (<div><b>Size:</b> {(track.filesize / 1_000_000).toFixed(2)} MB</div>)}
+    return (
+      <ModalRoot onCancel={closeModal} onOK={closeModal}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", maxHeight: "80vh", overflowY: "auto", marginBottom: "8px", gap: 16, borderRadius: 12}}>
+          <Focusable onClick={() => {}} onActivate={() => {}}>
+            <div tabIndex={0} style={{fontSize: 22, fontWeight: 600,textAlign: "center",width: "100%",cursor: "pointer", borderRadius: 4, padding: "2px 0",transition: "background 0.2s"}}>Cover art</div>
+          </Focusable>
+          {track.cover && track.cover_mime && (<img src={`data:${track.cover_mime};base64,${track.cover}`} style={{maxHeight: 200, width: "auto", maxWidth: "100%", borderRadius: 12, objectFit: "contain"}}/>)}
+          <Focusable onClick={() => {}} onActivate={() => {}}>
+            <div tabIndex={0} style={{fontSize: 22, fontWeight: 600, textAlign: "center", width: "100%", cursor: "pointer", borderRadius: 4, padding: "2px 0", transition: "background 0.2s"}}>Details</div>
+          </Focusable>
         </div>
-      <div style={{ marginTop: 16 }}>
-        <DialogButton onClick={closeModal}>Close</DialogButton>
-      </div>
-    </ModalRoot>
-  );
-}
+          <div style={{ fontSize: 16, lineHeight: 1.6, width: "100%", textAlign: "left"}}> 
+            {<div><b>Title:</b> {track.title || "Unknown title"}</div>} 
+            {<div><b>Artist:</b> {track.artist || "Unknown artist"}</div>} 
+            {<div><b>Album:</b> {track.album || "None"}</div>} 
+            {<div><b>Album Artist:</b> {track.albumartist || "Unknown artist"}</div>} 
+            {(<div><b>Track:</b> {track.track || "0"} / {track.track_total || "0"}</div>)} 
+            {(<div><b>Disc:</b> {track.disc || "0"} / {track.disc_total || "0"}</div>)} 
+            {<div><b>Genre:</b> {track.genre || "Unknown genre"}</div>} 
+            {<div><b>Year:</b> {track.year || "Unknown year"}</div>} 
+            {track.duration && (<div><b>Duration:</b> {Math.floor(track.duration / 60)}:{Math.floor(track.duration % 60).toString().padStart(2, "0")}</div> )} 
+            {track.mime_type && <div><b>MIME Type:</b> {track.mime_type}</div>} 
+            {track.full_path && (<div><b>Path:</b> {track.full_path}</div>)}
+            {track.filesize && (<div><b>Size:</b> {(track.filesize / 1_000_000).toFixed(2)} MB</div>)}
+          </div>
+        <div style={{ marginTop: 16 }}>
+          <DialogButton onClick={closeModal}>Close</DialogButton>
+        </div>
+      </ModalRoot>
+    );
+  }
 
   const track = playlist[current];
 
   return (
     <PanelSection>
       <PanelSectionRow>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            width: "100%",
-            marginLeft: -14,
-          }}>
-          {track?.cover && track?.cover_mime && (
-            <img
-              src={`data:${track.cover_mime};base64,${track.cover}`}
-              style={{
-                width: 80,
-                height: 80,
-                borderRadius: 6,
-                marginRight: 10,
-                objectFit: "cover",
-                flexShrink: 0,
-              }}/>
-          )}
+        <div style={{display: "flex",alignItems: "center",width: "100%",marginLeft: -14}}>
+          {track?.cover && track?.cover_mime && (<img src={`data:${track.cover_mime};base64,${track.cover}`} style={{width: 80, height: 80, borderRadius: 6, marginRight: 10, objectFit: "cover",flexShrink: 0,}}/>)}
           <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-              <AutoScrollText
-                text={track?.title ?? "No track selected"}
-                style={{ fontWeight: 600 }}/>
-              <AutoScrollText
-                text={track?.artist ?? "Unknown artist"}
-                style={{ fontSize: 12, opacity: 0.75 }}/>
+              <AutoScrollText text={track?.title ?? "No track selected"}style={{ fontWeight: 600 }}/>
+              <AutoScrollText text={track?.artist ?? "Unknown artist"}style={{ fontSize: 12, opacity: 0.75 }}/>
             </div>
           </div>
           <div style={{ fontSize: 12, opacity: 0.75, textAlign: "center" }}>
@@ -456,22 +413,8 @@ function Content() {
       </PanelSectionRow>
       <PanelSectionRow>
         <div style={{ display: "flex", flexDirection: "column", width: "100%", padding: "0px" }}>
-          <SliderField
-            label=""
-            value={progress}
-            min={0}
-            max={ready ? duration : 1}
-            step={0.5}
-            showValue={false}
-            disabled={!ready || error}
-            onChange={handleSeek}/>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              marginTop: "4px",
-              fontSize: 12,
-            }}>
+          <SliderField label="" value={progress} min={0} max={ready ? duration : 1} step={0.5} showValue={false} disabled={!ready || error} onChange={handleSeek}/>
+          <div style={{display: "flex", justifyContent: "space-between", marginTop: "4px",fontSize: 12}}>
             <span>{formatTime(progress)}</span>
             <span>{formatTime(duration)}</span>
           </div>
@@ -498,20 +441,12 @@ function Content() {
         <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px", marginLeft: "4px", }} onClick={togglePlay}>
           <MdShuffle/>
         </DialogButton>
-        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginLeft: "4px", }} onClick={togglePlay}>
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginLeft: "4px", }} onClick={showPlaylistModal}>
           <MdOutlinePlaylistPlay/>
         </DialogButton>
       </Focusable>
       <PanelSectionRow>
-        <SliderField
-          label={`Volume (${Math.round(volume * 100)}%)`}
-          value={volume}
-          min={0}
-          max={1}
-          step={0.05}
-          showValue={false}
-          onChange={handleVolumeChange}
-        />
+        <SliderField label={`Volume (${Math.round(volume * 100)}%)`} value={volume} min={0} max={1} step={0.05} showValue={false} onChange={handleVolumeChange}/>
       </PanelSectionRow>
     </PanelSection>
   );
