@@ -20,6 +20,7 @@ type TrackInfo = {
   duration?: number;
   mime_type?: string;
   full_path?: string;
+  filesize?: number;
   cover?: string;
   cover_mime?: string;
   url?: string;
@@ -314,10 +315,10 @@ function Content() {
         display: "flex", 
         flexDirection: "column", 
         alignItems: "flex-start",
-        width: "80vw", 
+        width: "45vw", 
         maxHeight: "80vh", 
         overflowY: "auto",
-        padding: 24,
+        marginBottom: "8px",
         gap: 16,
         borderRadius: 12
       }}>
@@ -368,10 +369,10 @@ function Content() {
             onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
           >Details</div>
         </Focusable>
-
-        <div style={{ fontSize: 16, lineHeight: 1.6, width: "100%", maxWidth: 500, textAlign: "left" }}> 
+      </div>
+        <div style={{ fontSize: 16, lineHeight: 1.6, width: "100%", maxWidth: "45vw", textAlign: "left" }}> 
           {<div><b>Title:</b> {track.title || "Unknown title"}</div>} 
-          {<div><b>Title:</b> {track.artist || "Unknown artist"}</div>} 
+          {<div><b>Artist:</b> {track.artist || "Unknown artist"}</div>} 
           {<div><b>Album:</b> {track.album || "None"}</div>} 
           {<div><b>Album Artist:</b> {track.albumartist || "Unknown artist"}</div>} 
           {(<div><b>Track:</b> {track.track || "0"} / {track.track_total || "0"}</div>)} 
@@ -381,8 +382,8 @@ function Content() {
           {track.duration && (<div><b>Duration:</b> {Math.floor(track.duration / 60)}:{Math.floor(track.duration % 60).toString().padStart(2, "0")}</div> )} 
           {track.mime_type && <div><b>MIME Type:</b> {track.mime_type}</div>} 
           {track.full_path && (<div><b>Path:</b> {track.full_path}</div>)}
+          {track.filesize && (<div><b>Size:</b> {(track.filesize / 1_000_000).toFixed(2)} MB</div>)}
         </div>
-      </div>
       <div style={{ marginTop: 16 }}>
         <DialogButton onClick={closeModal}>Close</DialogButton>
       </div>
