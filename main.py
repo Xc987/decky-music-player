@@ -45,7 +45,7 @@ class Plugin:
     def _config(self):
         Path("~/homebrew/settings/Music Player").expanduser().mkdir(parents=True, exist_ok=True)
         if not config_file.exists():
-            cfg = {"audio_library": str(Path("~/Music").expanduser()), "last_played": None, "volume": 1.0}
+            cfg = {"audio_library": str(Path("~/Music").expanduser()), "last_played": None, "volume": 1.0, "repeat": False}
             config_file.write_text(json.dumps(cfg, indent=2))
             return cfg
         return json.loads(config_file.read_text())
@@ -134,6 +134,13 @@ class Plugin:
 
     async def set_volume(self, volume: float):
         self.config["volume"] = max(0.0, min(1.0, float(volume)))
+        self._save_config()
+
+    async def get_repeat(self):
+        return bool(self.config.get("repeat", False))
+
+    async def set_repeat(self, value: bool):
+        self.config["repeat"] = bool(value)
         self._save_config()
 
     def _start_http_server(self):

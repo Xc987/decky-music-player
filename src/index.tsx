@@ -35,6 +35,8 @@ const loadTrack = callable<[number], TrackInfo>("load_track");
 const getInitialTrack = callable<[], number>("get_initial_track");
 const getVolume = callable<[], number>("get_volume");
 const setVolume = callable<[number], void>("set_volume");
+const getRepeat = callable<[], boolean>("get_repeat");
+const setRepeat = callable<[boolean], void>("set_repeat");
 
 let audio: HTMLAudioElement | null = null;
 
@@ -107,9 +109,11 @@ function Content() {
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
   const [volume, setVolumeState] = useState(1.0);
+  const [repeat, setRepeatState] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const isSeekingRef = useRef(false);
   const currentRef = useRef(current);
+  const repeatRef = useRef(repeat);
   const playlistRef = useRef<TrackInfo[]>(playlist);
   
   useEffect(() => {
@@ -121,13 +125,19 @@ function Content() {
   }, [playlist]);
 
   useEffect(() => {
+    repeatRef.current = repeat;
+  }, [repeat]);
+
+  useEffect(() => {
     (async () => {
       const list = await getPlaylist();
       const initial = await getInitialTrack();
       const vol = await getVolume();
+      const rep = await getRepeat();
       setPlaylist(list);
       setCurrent(initial);
       setVolumeState(vol);
+      setRepeatState(rep);
       if (!audio) {
         audio = new Audio();
         audio.preload = "auto";
@@ -136,6 +146,7 @@ function Content() {
       setInitialized(true);
     })();
   }, []);
+
 
   useEffect(() => {
     if (!audio) {
@@ -162,6 +173,13 @@ function Content() {
 
     const onEnded = async () => {
       if (!audio) return;
+
+      if (repeatRef.current) {
+        audio.currentTime = 0;
+        await audio.play();
+        return;
+      }
+
       const nextIndex = currentRef.current + 1;
       if (nextIndex < playlistRef.current.length) {
         await playTrack(nextIndex);
@@ -304,8 +322,13 @@ function Content() {
       .toString()
       .padStart(2, "0")}`;
 
-  const showTrackMetadataModal = (track: TrackInfo) => { showModal(<TrackMetadataModal track={track} />,undefined); };
+  const toggleRepeat = async () => {
+    const next = !repeat;
+    setRepeatState(next);
+    await setRepeat(next);
+  };
 
+  const showTrackMetadataModal = (track: TrackInfo) => { showModal(<TrackMetadataModal track={track} />,undefined); };
 
   function TrackMetadataModal({ track, closeModal }: { track: TrackInfo; closeModal?: () => void }) {
 
@@ -469,8 +492,8 @@ function Content() {
         <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px" }} onClick={() => track && showTrackMetadataModal(track)}>
           <MdInfoOutline/>
         </DialogButton>
-        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px", marginLeft: "4px", }} onClick={togglePlay}>
-          <MdOutlineRepeat/>
+        <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px", marginLeft: "4px", }} onClick={toggleRepeat}>
+          {repeat ? <MdOutlineRepeatOn /> : <MdOutlineRepeat />}
         </DialogButton>
         <DialogButton style={{ flex: 1, height: "40px", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, minWidth: 0, marginRight: "4px", marginLeft: "4px", }} onClick={togglePlay}>
           <MdShuffle/>
