@@ -8,6 +8,7 @@ from typing import Optional
 import threading
 import decky
 import mimetypes
+from urllib.parse import quote
 from tinytag import TinyTag, Image
 from http.server import SimpleHTTPRequestHandler
 from socketserver import ThreadingTCPServer
@@ -178,7 +179,9 @@ class Plugin:
         track_data = {**meta, "cover": cover, "cover_mime": mime}
         self.config["last_played"] = meta["filename"]
         self._save_config()
-        return {**track_data, "url": f"http://127.0.0.1:{self.http_port}/{meta['filename']}"}
+        music_dir = Path(self.config["audio_library"]).expanduser()
+        rel_path = Path(meta["full_path"]).resolve().relative_to(music_dir.resolve())
+        return {**track_data, "url": f"http://127.0.0.1:{self.http_port}/{quote(rel_path.as_posix())}"}
 
     async def get_volume(self):
         return float(self.config.get("volume", 1.0))
