@@ -32,6 +32,7 @@ class Plugin:
         self.playlist_meta: list[dict] = []
         self.http_port: int = 8082
         self.http_thread: Optional[threading.Thread] = None
+        self.http_server: Optional[ThreadingTCPServer] = None
         self.config: dict = {}
 
     async def _main(self):
@@ -168,6 +169,15 @@ class Plugin:
     async def set_repeat(self, value: bool):
         self.config["repeat"] = bool(value)
         self._save_config()
+        
+    async def _unload(self):
+        if self.http_server:
+            self.http_server.shutdown()
+            self.http_server.server_close()
+            self.http_server = None
+        if self.http_thread and self.http_thread.is_alive():
+            self.http_thread.join(timeout=2)
+            self.http_thread = None
 
     def _start_http_server(self):
         if not self.playlist:
@@ -212,8 +222,8 @@ class Plugin:
                 return f
 
         def serve():
-            with ThreadingTCPServer(("127.0.0.1", self.http_port), Handler) as httpd:
-                httpd.serve_forever()
+            self.http_server = ThreadingTCPServer(("127.0.0.1", self.http_port), Handler)
+            self.http_server.serve_forever()
 
         self.http_thread = threading.Thread(target=serve, daemon=True)
         self.http_thread.start()
