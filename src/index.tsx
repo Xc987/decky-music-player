@@ -32,6 +32,7 @@ type TrackInfo = {
 
 const getPlaylist = callable<[], TrackInfo[]>("get_playlist");
 const loadTrack = callable<[number], TrackInfo>("load_track");
+const getTrackMetadata = callable<[number], TrackInfo>("get_track_metadata");
 const getInitialTrack = callable<[], number>("get_initial_track");
 const getVolume = callable<[], number>("get_volume");
 const setVolume = callable<[number], void>("set_volume");
@@ -318,16 +319,34 @@ function Content() {
     await setRepeat(next);
   };
 
-  const showPlaylistModal = () => {
+  const showPlaylistModal = async () => {
+    const updatedPlaylist = await Promise.all(
+      playlist.map(async (track) => {
+        if (!track.cover) {
+          try {
+            const meta = await getTrackMetadata(track.index);
+            return { ...track, ...meta };
+          } catch {
+            return track;
+          }
+        }
+        return track;
+      })
+    );
+    setPlaylist(updatedPlaylist);
     showModal(
-      <PlaylistModal playlist={playlist} current={current} playing={playing} onSelect={async (index) => {
+      <PlaylistModal
+        playlist={updatedPlaylist}
+        current={current}
+        playing={playing}
+        onSelect={async (index) => {
           if (playing) {
             await playTrack(index);
           } else {
             await loadTrackSilently(index);
           }
         }}
-      />,undefined
+      />
     );
   };
 
