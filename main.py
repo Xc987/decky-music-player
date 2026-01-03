@@ -3,15 +3,19 @@ from __future__ import annotations
 import os
 import json
 import base64
-from pathlib import Path
-from typing import Optional
 import threading
 import decky
 import mimetypes
+import locale
+import unicodedata
+from pathlib import Path
+from typing import Optional
 from urllib.parse import quote
 from tinytag import TinyTag, Image
 from http.server import SimpleHTTPRequestHandler
 from socketserver import ThreadingTCPServer
+
+locale.setlocale(locale.LC_COLLATE, "")
 
 config_file = Path("~/homebrew/settings/Music Player").expanduser() / "config.json"
 
@@ -36,7 +40,7 @@ class Plugin:
         music_dir = Path(self.config["audio_library"]).expanduser()
         if music_dir.exists():
             supported_exts = {ext.lower() for ext in TinyTag.SUPPORTED_FILE_EXTENSIONS}
-            self.playlist = sorted([p for p in music_dir.rglob("*") if p.is_file() and p.suffix.lower() in supported_exts], key=lambda p: p.name.lower())
+            self.playlist = sorted([p for p in music_dir.rglob("*")if p.is_file() and p.suffix.lower() in supported_exts], key=Plugin.sort_key)
             self.playlist_meta: dict[int, dict] = {}
         if self.playlist and not self.config.get("last_played"):
             self.config["last_played"] = self.playlist[0].name
@@ -111,6 +115,16 @@ class Plugin:
                 "channels": None,
                 "bitdepth": None,
             }
+
+    @staticmethod
+    def sort_key(path: Path):
+        name = path.name
+        first = name[0]
+        if first.isalnum():
+            category = 1 if first.isdigit() else 2
+        else:
+            category = 0
+        return (category, locale.strxfrm(name.casefold()))
 
     async def get_playlist(self):
         return [{"index": i, "filename": p.name, "full_path": str(p)} for i, p in enumerate(self.playlist)]
