@@ -14,7 +14,6 @@ from http.server import SimpleHTTPRequestHandler
 from socketserver import ThreadingTCPServer
 
 config_file = Path("~/homebrew/settings/Music Player").expanduser() / "config.json"
-cache_file = Path("~/homebrew/settings/Music Player").expanduser() / "metadata_cache.json"
 
 cover_art_path = Path(os.path.dirname(__file__)) / "assets/cover.png"
 fallback_cover_b64 = (
@@ -30,15 +29,15 @@ class Plugin:
         self.http_port: int = 8082
         self.http_thread: Optional[threading.Thread] = None
         self.config: dict = {}
-        self.metadata_cache: dict = {}
+
     async def _main(self):
         self.config = self._config()
-        self._load_metadata_cache()
+
         music_dir = Path(self.config["audio_library"]).expanduser()
         if music_dir.exists():
             supported_exts = {ext.lower() for ext in TinyTag.SUPPORTED_FILE_EXTENSIONS}
             self.playlist = sorted([p for p in music_dir.rglob("*") if p.is_file() and p.suffix.lower() in supported_exts],key=lambda p: p.name.lower())
-            self.playlist_meta = [self._get_cached_meta(p) for p in self.playlist]
+            self.playlist_meta = [self._read_tags(p) for p in self.playlist]
         if self.playlist and not self.config.get("last_played"):
             self.config["last_played"] = self.playlist[0].name
             self._save_config()
@@ -55,31 +54,16 @@ class Plugin:
     def _save_config(self):
         config_file.write_text(json.dumps(self.config, indent=2))
 
-    def _load_metadata_cache(self):
-        if cache_file.exists():
-            try:
-                self.metadata_cache = json.loads(cache_file.read_text())
-            except Exception:
-                self.metadata_cache = {}
-        else:
-            self.metadata_cache = {}
-
-    def _save_metadata_cache(self):
-        cache_file.write_text(json.dumps(self.metadata_cache, indent=2))
-
-    def _get_cached_meta(self, path: Path):
-        key = str(path.resolve())
-        if key in self.metadata_cache:
-            meta = self.metadata_cache[key]
-        else:
-            meta = self._read_tags_basic(path)
-            self.metadata_cache[key] = meta
-            self._save_metadata_cache()
-        return meta
-
-    def _read_tags_basic(self, path: Path):
+    def _read_tags(self, path: Path):
         try:
-            tag = TinyTag.get(path)
+            tag = TinyTag.get(path, image=True)
+            image = tag.images.front_cover or tag.images.any if tag.images else None
+            if image and image.data:
+                cover = base64.b64encode(image.data).decode("ascii")
+                mime = image.mime_type
+            else:
+                cover = fallback_cover_b64
+                mime = "image/png"
             return {
                 "title": tag.title or path.stem,
                 "artist": tag.artist,
@@ -95,13 +79,13 @@ class Plugin:
                 "mime_type": mimetypes.guess_type(str(path))[0],
                 "full_path": str(path),
                 "filesize": tag.filesize,
+                "cover": cover,
+                "cover_mime": mime,
                 "filename": path.name,
                 "bitrate": tag.bitrate,
                 "samplerate": tag.samplerate,
                 "channels": tag.channels,
-                "bitdepth": getattr(tag, "bitdepth", None),
-                "cover": None,
-                "cover_mime": None
+                "bitdepth": getattr(tag, "bitdepth", None)
             }
         except Exception as e:
             return {
@@ -118,37 +102,15 @@ class Plugin:
                 "duration": None,
                 "mime_type": mimetypes.guess_type(str(path))[0],
                 "full_path": str(path),
-                "filesize": None,
+                "filesize": tag.filesize,
+                "cover": fallback_cover_b64,
+                "cover_mime": "image/png",
                 "filename": path.name,
                 "bitrate": None,
                 "samplerate": None,
                 "channels": None,
                 "bitdepth": None,
-                "cover": None,
-                "cover_mime": None
             }
-
-    def _read_cover_art(self, index: int):
-        """Load cover art lazily"""
-        meta = self.playlist_meta[index]
-        if meta.get("cover") is None:
-            try:
-                tag = TinyTag.get(meta["full_path"], image=True)
-                image = tag.images.front_cover or tag.images.any if tag.images else None
-                if image and image.data:
-                    cover = base64.b64encode(image.data).decode("ascii")
-                    mime = image.mime_type
-                else:
-                    cover = fallback_cover_b64
-                    mime = "image/png"
-                meta["cover"] = cover
-                meta["cover_mime"] = mime
-                self.metadata_cache[str(Path(meta["full_path"]).resolve())] = meta
-                self._save_metadata_cache()
-            except Exception:
-                meta["cover"] = fallback_cover_b64
-                meta["cover_mime"] = "image/png"
-        return meta
 
     async def get_playlist(self):
         return [{"index": i, **meta} for i, meta in enumerate(self.playlist_meta)]
@@ -164,24 +126,11 @@ class Plugin:
 
     async def load_track(self, index: int):
         meta = self.playlist_meta[index]
-        try:
-            tag = TinyTag.get(meta["full_path"], image=True)
-            image = tag.images.front_cover or tag.images.any if tag.images else None
-            if image and image.data:
-                cover = base64.b64encode(image.data).decode("ascii")
-                mime = image.mime_type
-            else:
-                cover = fallback_cover_b64
-                mime = "image/png"
-        except Exception:
-            cover = fallback_cover_b64
-            mime = "image/png"
-        track_data = {**meta, "cover": cover, "cover_mime": mime}
         self.config["last_played"] = meta["filename"]
         self._save_config()
         music_dir = Path(self.config["audio_library"]).expanduser()
         rel_path = Path(meta["full_path"]).resolve().relative_to(music_dir.resolve())
-        return {**track_data, "url": f"http://127.0.0.1:{self.http_port}/{quote(rel_path.as_posix())}"}
+        return {**meta, "url": f"http://127.0.0.1:{self.http_port}/{quote(rel_path.as_posix())}"}
 
     async def get_volume(self):
         return float(self.config.get("volume", 1.0))

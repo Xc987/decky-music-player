@@ -119,10 +119,6 @@ function Content() {
         audio.preload = "auto";
       }
       audio.volume = vol;
-      if (list.length > 0) {
-        const trackWithCover = await loadTrack(initial);
-        setPlaylist(prev => prev.map((t, i) => (i === initial ? trackWithCover : t)));
-      }
       setInitialized(true);
     })();
   }, []);
@@ -206,7 +202,7 @@ function Content() {
       setError(true);
       return;
     }
-    setPlaylist(prev => prev.map((t, i) => (i === index ? track : t)));
+
     audio.src = track.url;
     audio.volume = volume;
     audio.load();
@@ -228,7 +224,6 @@ function Content() {
       return;
     }
 
-    setPlaylist(prev => prev.map((t, i) => (i === index ? track : t)));
     audio.src = track.url;
     audio.volume = volume;
     audio.load();
