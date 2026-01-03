@@ -36,8 +36,8 @@ class Plugin:
         music_dir = Path(self.config["audio_library"]).expanduser()
         if music_dir.exists():
             supported_exts = {ext.lower() for ext in TinyTag.SUPPORTED_FILE_EXTENSIONS}
-            self.playlist = sorted([p for p in music_dir.rglob("*") if p.is_file() and p.suffix.lower() in supported_exts],key=lambda p: p.name.lower())
-            self.playlist_meta = [self._read_tags(p) for p in self.playlist]
+            self.playlist = sorted([p for p in music_dir.rglob("*") if p.is_file() and p.suffix.lower() in supported_exts], key=lambda p: p.name.lower())
+            self.playlist_meta: dict[int, dict] = {}
         if self.playlist and not self.config.get("last_played"):
             self.config["last_played"] = self.playlist[0].name
             self._save_config()
@@ -113,7 +113,7 @@ class Plugin:
             }
 
     async def get_playlist(self):
-        return [{"index": i, **meta} for i, meta in enumerate(self.playlist_meta)]
+        return [{"index": i, "filename": p.name, "full_path": str(p)} for i, p in enumerate(self.playlist)]
 
     async def get_initial_track(self):
         last = self.config.get("last_played")
@@ -125,12 +125,21 @@ class Plugin:
         return 0
 
     async def load_track(self, index: int):
+        if index < 0 or index >= len(self.playlist):
+            raise IndexError("Invalid track index")
+        if index not in self.playlist_meta:
+            self.playlist_meta[index] = self._read_tags(self.playlist[index])
         meta = self.playlist_meta[index]
         self.config["last_played"] = meta["filename"]
         self._save_config()
         music_dir = Path(self.config["audio_library"]).expanduser()
         rel_path = Path(meta["full_path"]).resolve().relative_to(music_dir.resolve())
-        return {**meta, "url": f"http://127.0.0.1:{self.http_port}/{quote(rel_path.as_posix())}"}
+        return {"index": index, **meta, "url": f"http://127.0.0.1:{self.http_port}/{quote(rel_path.as_posix())}"}
+
+    async def get_track_metadata(self, index: int):
+        if index not in self.playlist_meta:
+            self.playlist_meta[index] = self._read_tags(self.playlist[index])
+        return {"index": index, **self.playlist_meta[index]}
 
     async def get_volume(self):
         return float(self.config.get("volume", 1.0))

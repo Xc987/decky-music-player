@@ -185,10 +185,24 @@ function Content() {
 
   useEffect(() => {
     if (!audio || playlist.length === 0 || !initialized) return;
-    if (audio.src) return;
-    loadTrackSilently(current);
+    (async () => {
+      const track = await loadTrack(current);
+      updatePlaylistTrack(track);
+      if (!audio.src) {
+        audio.src = track.url!;
+        audio.load();
+      }
+    })();
   }, [playlist, initialized]);
 
+  const updatePlaylistTrack = (track: TrackInfo) => {
+    setPlaylist(prev => {
+      const copy = [...prev];
+      copy[track.index] = { ...copy[track.index], ...track };
+      return copy;
+    });
+  };
+  
   const loadTrackSilently = async (index: number) => {
     if (!audio) return;
 
@@ -202,7 +216,7 @@ function Content() {
       setError(true);
       return;
     }
-
+    updatePlaylistTrack(track);
     audio.src = track.url;
     audio.volume = volume;
     audio.load();
@@ -223,7 +237,7 @@ function Content() {
       setError(true);
       return;
     }
-
+    updatePlaylistTrack(track);
     audio.src = track.url;
     audio.volume = volume;
     audio.load();
